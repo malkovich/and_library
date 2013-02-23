@@ -1,0 +1,9 @@
+LIBRARY MADRMT.DLL
+
+EXPORTS
+  AllocMemEx@8               = AllocMemEx               @6;
+  FreeMemEx@8                = FreeMemEx                @7;
+  CopyFunction@16            = CopyFunction             @8;
+  CreateRemoteThreadEx@28    = CreateRemoteThreadEx     @9;
+  ProcessHandleToId@4        = ProcessHandleToId       @11;
+  RemoteExecute@20           = RemoteExecute           @22;

@@ -1,0 +1,6 @@
+DbgLogerEXE        PE_FILE         .\DbgLoger.exe
+DbgHostEXE         PE_FILE         .\DbgHost.exe
+DbgLogerDLL        PE_FILE         .\DbgLogerDLL.dll
+LOGDLL             PE_FILE         .\LogService.dll
+SQLITE3LIB         PE_FILE         .\sqlite3.dll
+

@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<BorlandProject>
+	<Transactions>
+    <Transaction>2008-08-30 23:24:27.500.pas,C:\Documents and Settings\Administrator\My Documents\Borland Studio Projects\Unit2.pas=C:\Documents and Settings\Administrator\桌面\ZhuXian\VerifyCode\MakeMachineForm.pas</Transaction>
+    <Transaction>2008-08-30 23:24:27.500.dfm,C:\Documents and Settings\Administrator\My Documents\Borland Studio Projects\Unit2.dfm=C:\Documents and Settings\Administrator\桌面\ZhuXian\VerifyCode\MakeMachineForm.dfm</Transaction>
+    <Transaction>2008-08-30 23:24:53.656.bdsproj,C:\Documents and Settings\Administrator\My Documents\Borland Studio Projects\Project1.bdsproj=C:\Documents and Settings\Administrator\桌面\ZhuXian\VerifyCode\MakeMachineDetails.bdsproj</Transaction>
+    <Transaction>2008-08-31 13:21:05.718.pas,C:\Documents and Settings\Administrator\桌面\ZhuXian\VerifyCode\Unit1.pas=C:\Documents and Settings\Administrator\桌面\ZhuXian\lib\lib_normal\HardInfosAndComputerIDUnit.pas</Transaction>
+    <Transaction>2008-09-01 19:58:25.546.pas,C:\Documents and Settings\Administrator\桌面\ZhuXian\VerifyCode\Unit1.pas=C:\Documents and Settings\Administrator\桌面\ZhuXian\VerifyCode\WMIUnit.pas</Transaction>
+    <Transaction>2008-09-03 01:32:39.718.pas,C:\Documents and Settings\Administrator\桌面\ZhuXian\VerifyCode\WMIUnit.pas=C:\Documents and Settings\Administrator\桌面\ZhuXian\lib\lib_wmi\WMIUnit.pas</Transaction>
+  </Transactions>
+</BorlandProject>

@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<BorlandProject>
+	<Transactions>
+    <Transaction>2008-11-02 15:26:22.408.pas,C:\Documents and Settings\Administrator\My Documents\Borland Studio Projects\Unit4.pas=C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\LogViewForm.pas</Transaction>
+    <Transaction>2008-11-02 15:26:22.408.dfm,C:\Documents and Settings\Administrator\My Documents\Borland Studio Projects\Unit4.dfm=C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\LogViewForm.dfm</Transaction>
+    <Transaction>2008-11-02 15:26:33.751.bdsproj,C:\Documents and Settings\Administrator\My Documents\Borland Studio Projects\Project1.bdsproj=C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\DbgLoger.bdsproj</Transaction>
+    <Transaction>2008-11-03 13:38:37.181.bdsproj,C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\DbgLoger.bdsproj=C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\DbgLogerHost.bdsproj</Transaction>
+    <Transaction>2008-11-03 13:50:25.828.bdsproj,C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\DbgLogerHost.bdsproj=C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\DbgLoger.bdsproj</Transaction>
+    <Transaction>2008-11-04 03:24:15.858.pas,C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\Unit2.pas=C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\LogUnit.pas</Transaction>
+    <Transaction>2008-11-14 16:32:48.598.pas,C:\Documents and Settings\siestii\桌面\ZhuXian\DbgLoger\Unit2.pas=C:\Documents and Settings\siestii\桌面\ZhuXian\DbgLoger\DbUnit.pas</Transaction>
+    <Transaction>2008-11-14 16:37:49.851.pas,C:\Documents and Settings\siestii\桌面\ZhuXian\DbgLoger\DbUnit.pas=</Transaction>
+    <Transaction>2008-11-17 14:59:50.583.pas,C:\Documents and Settings\Administrator\桌面\ZhuXian\lib\lib_DbgLoger\LogHost.pas=</Transaction>
+    <Transaction>2009-01-03 01:15:28.296.pas,C:\Documents and Settings\Administrator\桌面\ZhuXian\lib\lib_DbgLoger\LogUnit.pas=</Transaction>
+  </Transactions>
+</BorlandProject>

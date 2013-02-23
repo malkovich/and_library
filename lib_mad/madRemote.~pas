@@ -1,0 +1,2958 @@
+{///////////////////////////////////////////////////////////////////////////////
+Project   Dcu2Pas Version 1.3
+Purpose   Decompile a D2-D7, K1-K3's dcu(dpu) file to Delphi source as origin as
+          possible, without or with minimal modifications, then recompile to new
+          one under other Delphi versions
+Author    Nengwen Zhuo(×¿ÄÜÎÄ)
+Homes     http://soarowl.uhome.net, http://www.websamba.com/soarowl,
+          http://soarowl.0catch.com
+Emails    soarowl@yeah.net, soarowl@sina.com.cn
+Released  2003-02-10
+Lastest   home/dl/Dcu2Pas.rar
+
+          FOR RESTORE YOUR LOST SOURCES AND OPTIMIZE YOUR CODES ONLY!!!
+
+          Decompiled on 2008-1-3 0:40:00
+///////////////////////////////////////////////////////////////////////////////}
+
+unit madRemote;
+
+interface
+
+uses
+  madTypes,
+  madDisAsm,
+  Windows;
+
+type
+  TRemoteExecuteFunction = function(params: Pointer): DWORD; stdcall;
+
+  TDAProcess = array of record
+    id: DWORD;
+    exeFile: String;
+    session: DWORD;
+    sid: String;
+  end;
+
+  TProcessEntry32 = record
+    size: Cardinal;
+    usage: Cardinal;
+    process: Cardinal;
+    defaultHeap: Cardinal;
+    module: Cardinal;
+    threadCount: Cardinal;
+    parentProcess: Cardinal;
+    basePriority: Integer;
+    flags: Cardinal;
+    exeFile: packed array [0..259] of Char;
+  end;
+
+  TModuleEntry32 = record
+    size: Cardinal;
+    module: Cardinal;
+    ownerProcess: Cardinal;
+    GlobalUsage: Cardinal;
+    ProcessUsage: Cardinal;
+    baseAddress: Pointer;
+    baseSize: Cardinal;
+    handle: Cardinal;
+    fileName: packed array [Byte] of Char;
+    exePath: packed array [0..259] of Char;
+  end;
+
+const
+  Process32First: function(snap: DWORD; var pe: TProcessEntry32): BOOL; stdcall = Process32First;
+
+  Process32Next: function(snap: DWORD; var pe: TProcessEntry32): BOOL; stdcall = Process32Next;
+
+  Module32First: function(snap: DWORD; var me: TModuleEntry32): BOOL; stdcall = Module32First;
+
+  Module32Next: function(snap: DWORD; var me: TModuleEntry32): BOOL; stdcall = Module32Next;
+
+  CreateToolhelp32Snapshot: function(flags: DWORD; pid: DWORD): DWORD; stdcall = CreateToolhelp32Snapshot;
+
+  TH32CS_SnapProcess = 2;
+  TH32CS_SnapModule = 8;
+  CSetErrorMode = #6'0!'#16''''':'''#24':10';
+  CGetVersion = #18'0!'#3'0''&<:;';
+  CWaitForSingleObject = #2'4<!'#19':'''#6'<;290'#26'7?06!';
+  CCloseHandle = #22'9:&0'#29'4;190';
+  CProcessIdToSessionId = #5''':60&&'#28'1'#1':'#6'0&&<:;'#28'1';
+  CNtQueryInformationProcess = #27'!'#4' 0'','#28';3:''84!<:;'#5''':60&&';
+  CGetCurrentProcess = #18'0!'#22' ''''0;!'#5''':60&&';
+  CGetCurrentProcessId = #18'0!'#22' ''''0;!'#5''':60&&'#28'1';
+  CVirtualProtect = #3'<''! 49'#5''':!06!';
+  CSleep = #6'900%';
+  CNtQuerySystemInformation = #27'!'#4' 0'','#6',&!08'#28';3:''84!<:;';
+  CProcess32Next = #5''':60&&fg'#27'0-!';
+  CSmss = #6#24#6#6'{0-0';
+
+procedure InitToolhelp;
+
+function EnumProcesses: TDAProcess;
+
+function GetKernel32ProcessHandle: DWORD;
+
+function GetSmssProcessHandle: DWORD;
+
+function HandleLiveForever(handle: DWORD): DWORD;
+
+procedure InitSharedMem9x(alloc: TPPointer; free: TPPointer);
+
+function AllocMemEx(size: DWORD; processHandle: DWORD = 
+{
+         0: 00 00 00 00                                          ....
+}): Pointer; stdcall;
+
+function FreeMemEx(mem: Pointer; processHandle: DWORD = 
+{
+         0: 00 00 00 00                                          ....
+}): BOOL; stdcall;
+
+procedure InitUnprotectMemory;
+
+function IsMemoryProtected(addr: Pointer): Boolean;
+
+procedure UnprotectMemoryAsm;
+
+function UnprotectMemory(addr: Pointer; size: DWORD): Boolean;
+
+function ProtectMemory(addr: Pointer; size: DWORD): Boolean;
+
+function CopyFunction(func: Pointer; processHandle: DWORD = 
+{
+         0: 00 00 00 00                                          ....
+}; acceptUnknownTargets: Boolean = false; buffer: TPPointer = nil; fi: TPFunctionInfo = nil): Pointer;
+
+function CreateRemoteThreadEx(processHandle: DWORD; threadAttr: PSecurityAttributes; stackSize: Integer; startAddr: Pointer; params: Pointer; creationFlags: DWORD; var threadId: DWORD): DWORD; stdcall;
+
+function RemoteExecute(processHandle: DWORD; func: TRemoteExecuteFunction; var funcResult: DWORD; params: Pointer = nil; size: DWORD = 
+{
+         0: 00 00 00 00                                          ....
+}): BOOL; stdcall;
+
+function ProcessHandleToId(processHandle: DWORD): DWORD; stdcall;
+
+implementation
+
+uses
+  madStrings,
+  madTools;
+
+const
+  CComCtl32 = '6:86!9fg{199';
+  CMchRT9x = '86='#7#1'l-';
+  CRtlCreateUserThread = #7'!9'#22'''04!0'#0'&0'''#1'=''041';
+  CCreateToolhelp32Snapshot = #22'''04!0'#1'::9=09%fg'#6';4%&=:!';
+  CProcess32First = #5''':60&&fg'#19'<''&!';
+  CModule32First = #24':1 90fg'#19'<''&!';
+  CModule32Next = #24':1 90fg'#27'0-!';
+  CVirtualAllocEx = #3'<''! 49'#20'99:6'#16'-';
+  CVirtualQueryEx = #3'<''! 49'#4' 0'','#16'-';
+  CVirtualFreeEx = #3'<''! 49'#19'''00'#16'-';
+  CVirtualFree = #3'<''! 49'#19'''00';
+  CGetThreadContext = #18'0!'#1'=''041'#22':;!0-!';
+  CSetThreadContext = #6'0!'#1'=''041'#22':;!0-!';
+  CCreateRemoteThread = #22'''04!0'#7'08:!0'#1'=''041';
+  CIsBadWritePtr = #28'&'#23'41'#2'''<!0'#5'!''';
+  CGetCurrentThread = #18'0!'#22' ''''0;!'#1'=''041';
+  CDuplicateHandle = #17' %9<64!0'#29'4;190';
+  CCreateThread = #22'''04!0'#1'=''041';
+  CGetExitCodeThread = #18'0!'#16'-<!'#22':10'#1'=''041';
+  CExitThread = #16'-<!'#1'=''041';
+  CDebugActiveProcess = #17'07 2'#20'6!<#0'#5''':60&&';
+
+type
+  TNtProcessInfo = record
+    offset: Cardinal;
+    numThreads: Cardinal;
+    d1: array [2..14] of Cardinal;
+    name: PWideChar;
+    d2: Cardinal;
+    pid: Cardinal;
+    parentPid: Cardinal;
+    handleCount: Cardinal;
+    sessionId: Cardinal;
+    d4: array [21..42] of Cardinal;
+    threads: array [0..16777214] of record
+      tidNt4: Cardinal;
+      d5: array [44..54] of Cardinal;
+      tidNt5: Cardinal;
+      d6: array [56..58] of Cardinal;
+    end;
+  end;
+
+const
+  VirtualAllocEx: function(process: DWORD; address: Pointer; size: DWORD; allocType: DWORD; flags: DWORD): Pointer; stdcall = VirtualAllocEx;
+
+  VirtualFreeEx: function(process: DWORD; address: Pointer; size: DWORD; freeType: DWORD): BOOL; stdcall = VirtualFreeEx;
+
+  VirtualQueryEx: function(process: DWORD; address: Pointer; var buf: TMemoryBasicInformation; len: DWORD): DWORD; stdcall = VirtualQueryEx;
+
+  ReadProcessMemory: function(process: DWORD; const addr: Pointer; buf: Pointer; size: DWORD; var written: DWORD): BOOL; stdcall = ReadProcessMemory;
+
+  WriteProcessMemory: function(process: DWORD; const addr: Pointer; buf: Pointer; size: DWORD; var written: DWORD): BOOL; stdcall = WriteProcessMemory;
+
+  GetThreadContext: function(thread: DWORD; var context: TContext): BOOL; stdcall = GetThreadContext;
+
+  SetThreadContext: function(thread: DWORD; const context: TContext): BOOL; stdcall = SetThreadContext;
+
+  CreateRemoteThread: function(process: DWORD; attr: Pointer; stack: DWORD; startAddr: Pointer; params: Pointer; flags: DWORD; var tid: DWORD): DWORD; stdcall = CreateRemoteThread;
+
+  SharedMem9x_Alloc: function(size: DWORD): Pointer; stdcall = SharedMem9x_Alloc;
+
+  SharedMem9x_Free: function(ptr: Pointer): BOOL; stdcall = SharedMem9x_Free;
+
+  NtQuerySystemInformation: function(infoClass: DWORD; buf: Pointer; size: DWORD; retSize: TPCardinal): DWORD; stdcall = NtQuerySystemInformation;
+
+procedure InitToolhelp;
+asm
+  @@0:        cmp     dword ptr Process32First, +$00
+  @@7:        jnz     @@94
+  @@9:        xor     edx, edx
+  @@11:       mov     eax, offset @@104
+  @@16:       call    KernelProc
+  @@21:       mov     dword ptr CreateToolhelp32Snapshot, eax
+  @@26:       xor     edx, edx
+  @@28:       mov     eax, offset @@140
+  @@33:       call    KernelProc
+  @@38:       mov     dword ptr Process32First, eax
+  @@43:       xor     edx, edx
+  @@45:       mov     eax, offset @@164
+  @@50:       call    KernelProc
+  @@55:       mov     dword ptr Process32Next, eax
+  @@60:       xor     edx, edx
+  @@62:       mov     eax, offset @@188
+  @@67:       call    KernelProc
+  @@72:       mov     dword ptr Module32First, eax
+  @@77:       xor     edx, edx
+  @@79:       mov     eax, offset @@212
+  @@84:       call    KernelProc
+  @@89:       mov     dword ptr Module32Next, eax
+  @@94:       {ret}
+
+  @@95:       
+  {
+           0: 00 FF FF FF FF 18 00 00 00 16 27 30 34 21 30 01      .ÿÿÿÿ.....'04!0.
+          10: 3A 3A 39 3D 30 39 25 66 67 06 3B 34 25 26 3D 3A      ::9=09%fg.;4%&=:
+          20: 21 00 00 00 00 FF FF FF FF 0E 00 00 00 05 27 3A      !....ÿÿÿÿ.....':
+          30: 36 30 26 26 66 67 13 3C 27 26 21 00 00 FF FF FF      60&&fg.<'&!..ÿÿÿ
+          40: FF 0D 00 00 00 05 27 3A 36 30 26 26 66 67 1B 30      ÿ.....':60&&fg.0
+          50: 2D 21 00 00 00 FF FF FF FF 0D 00 00 00 18 3A 31      -!...ÿÿÿÿ.....:1
+          60: 20 39 30 66 67 13 3C 27 26 21 00 00 00 FF FF FF       90fg.<'&!...ÿÿÿ
+          70: FF 0C 00 00 00 18 3A 31 20 39 30 66 67 1B 30 2D      ÿ.....:1 90fg.0-
+          80: 21 00 00 00 00                                       !....
+  }
+end;
+
+  procedure InitRemoteProcs;
+  asm
+    @@0:        cmp     dword ptr ReadProcessMemory, +$00
+    @@7:        jnz     @@94
+    @@9:        xor     edx, edx
+    @@11:       mov     eax, offset @@104
+    @@16:       call    KernelProc
+    @@21:       mov     dword ptr ReadProcessMemory, eax
+    @@26:       xor     edx, edx
+    @@28:       mov     eax, offset @@132
+    @@33:       call    KernelProc
+    @@38:       mov     dword ptr WriteProcessMemory, eax
+    @@43:       xor     edx, edx
+    @@45:       mov     eax, offset @@160
+    @@50:       call    KernelProc
+    @@55:       mov     dword ptr GetThreadContext, eax
+    @@60:       xor     edx, edx
+    @@62:       mov     eax, offset @@188
+    @@67:       call    KernelProc
+    @@72:       mov     dword ptr SetThreadContext, eax
+    @@77:       xor     edx, edx
+    @@79:       mov     eax, offset @@216
+    @@84:       call    KernelProc
+    @@89:       mov     dword ptr CreateRemoteThread, eax
+    @@94:       {ret}
+
+    @@95:       
+    {
+             0: 00 FF FF FF FF 11 00 00 00 07 30 34 31 05 27 3A      .ÿÿÿÿ.....041.':
+            10: 36 30 26 26 18 30 38 3A 27 2C 00 00 00 FF FF FF      60&&.08:',...ÿÿÿ
+            20: FF 12 00 00 00 02 27 3C 21 30 05 27 3A 36 30 26      ÿ.....'<!0.':60&
+            30: 26 18 30 38 3A 27 2C 00 00 FF FF FF FF 10 00 00      &.08:',..ÿÿÿÿ...
+            40: 00 12 30 21 01 3D 27 30 34 31 16 3A 3B 21 30 2D      ..0!.='041.:;!0-
+            50: 21 00 00 00 00 FF FF FF FF 10 00 00 00 06 30 21      !....ÿÿÿÿ.....0!
+            60: 01 3D 27 30 34 31 16 3A 3B 21 30 2D 21 00 00 00      .='041.:;!0-!...
+            70: 00 FF FF FF FF 12 00 00 00 16 27 30 34 21 30 07      .ÿÿÿÿ.....'04!0.
+            80: 30 38 3A 21 30 01 3D 27 30 34 31 00 00               08:!0.='041..
+    }
+  end;
+
+function EnumProcesses: TDAProcess;
+var
+  count: Integer;
+  c1: Cardinal;
+  c2: Cardinal;
+  pe: TProcessEntry32;
+  p1: Pointer;
+  npi: ^TNtProcessInfo;
+
+  procedure AddItem(id: DWORD; session: DWORD; exeFile: String; sid: PSID);
+  var
+    i1: Integer;
+  asm
+    @@0:        {stack frame start}
+    @@3:        push    ecx
+    @@4:        push    ebx
+    @@5:        push    esi
+    @@6:        push    edi
+    @@7:        mov     [ebp-$04], ecx
+    @@10:       mov     edi, edx
+    @@12:       mov     ebx, eax
+    @@14:       mov     esi, [ebp+$08]
+    @@17:       mov     eax, [ebp-$04]
+    @@20:       call    System.@LStrAddRef
+    @@25:       {try}
+      @@39:       mov     eax, [ebp+$0C]
+      @@42:       mov     eax, [eax-$04]
+      @@45:       mov     eax, [eax]
+      @@47:       call    System.@DynArrayLength
+      @@52:       mov     edx, [ebp+$0C]
+      @@55:       cmp     eax, [edx-$08]
+      @@58:       jnz     @@132
+      @@60:       mov     eax, [ebp+$0C]
+      @@63:       cmp     dword ptr [eax-$08], +$00
+      @@67:       jnz     @@98
+      @@69:       push    $40
+      @@71:       mov     eax, [ebp+$0C]
+      @@74:       mov     eax, [eax-$04]
+      @@77:       mov     ecx, $00000001
+      @@82:       mov     edx, TDAProcess
+      @@88:       call    System.@DynArraySetLength
+      @@93:       add     esp, +$04
+      @@96:       jmp     @@132
+      @@98:       mov     eax, [ebp+$0C]
+      @@101:      mov     eax, [eax-$08]
+      @@104:      add     eax, eax
+      @@106:      push    eax
+      @@107:      mov     eax, [ebp+$0C]
+      @@110:      mov     eax, [eax-$04]
+      @@113:      mov     ecx, $00000001
+      @@118:      mov     edx, TDAProcess
+      @@124:      call    System.@DynArraySetLength
+      @@129:      add     esp, +$04
+      @@132:      mov     eax, [ebp+$0C]
+      @@135:      mov     eax, [eax-$08]
+      @@138:      add     eax, eax
+      @@140:      mov     edx, [ebp+$0C]
+      @@143:      mov     edx, [edx-$04]
+      @@146:      mov     edx, [edx]
+      @@148:      mov     [edx+eax*8], ebx
+      @@151:      mov     eax, [ebp+$0C]
+      @@154:      mov     eax, [eax-$08]
+      @@157:      add     eax, eax
+      @@159:      mov     edx, [ebp+$0C]
+      @@162:      mov     edx, [edx-$04]
+      @@165:      mov     edx, [edx]
+      @@167:      lea     eax, [edx+eax*8+$04]
+      @@171:      mov     edx, [ebp-$04]
+      @@174:      call    System.@LStrAsg
+      @@179:      mov     eax, [ebp+$0C]
+      @@182:      mov     eax, [eax-$08]
+      @@185:      add     eax, eax
+      @@187:      mov     edx, [ebp+$0C]
+      @@190:      mov     edx, [edx-$04]
+      @@193:      mov     edx, [edx]
+      @@195:      mov     [edx+eax*8+$08], edi
+      @@199:      test    esi, esi
+      @@201:      jz      @@213
+      @@203:      push    esi
+      @@204:      call    GetLengthSid
+      @@209:      mov     ebx, eax
+      @@211:      jmp     @@215
+      @@213:      xor     ebx, ebx
+      @@215:      mov     eax, [ebp+$0C]
+      @@218:      mov     eax, [eax-$08]
+      @@221:      add     eax, eax
+      @@223:      mov     edx, [ebp+$0C]
+      @@226:      mov     edx, [edx-$04]
+      @@229:      mov     edx, [edx]
+      @@231:      lea     eax, [edx+eax*8+$0C]
+      @@235:      mov     edx, ebx
+      @@237:      call    System.@LStrSetLength
+      @@242:      test    ebx, ebx
+      @@244:      jle     @@275
+      @@246:      mov     eax, [ebp+$0C]
+      @@249:      mov     eax, [eax-$08]
+      @@252:      add     eax, eax
+      @@254:      mov     edx, [ebp+$0C]
+      @@257:      mov     edx, [edx-$04]
+      @@260:      mov     edx, [edx]
+      @@262:      mov     edx, [edx+eax*8+$0C]
+      @@266:      mov     eax, esi
+      @@268:      mov     ecx, ebx
+      @@270:      call    Move
+      @@275:      mov     eax, [ebp+$0C]
+      @@278:      inc     dword ptr [eax-$08]
+    @@281:      {finally}
+      @@294:      lea     eax, [ebp-$04]
+      @@297:      call    System.@LStrClr
+    @@302:      {end; finally}
+    @@310:      pop     edi
+    @@311:      pop     esi
+    @@312:      pop     ebx
+    @@313:      pop     ecx
+    @@314:      {stack frame end}
+  end;
+asm
+  @@0:        {stack frame start, has local variables}
+  @@9:        push    ebx
+  @@10:       push    esi
+  @@11:       push    edi
+  @@12:       xor     edx, edx
+  @@14:       mov     [ebp+$FFFFFEC4], edx
+  @@20:       mov     [ebp+$FFFFFEC8], edx
+  @@26:       mov     [ebp-$04], eax
+  @@29:       {try}
+    @@43:       mov     eax, [ebp-$04]
+    @@46:       mov     edx, TDAProcess
+    @@52:       call    System.@DynArrayClear
+    @@57:       xor     eax, eax
+    @@59:       mov     [ebp-$08], eax
+    @@62:       call    GetVersion
+    @@67:       test    eax, $80000000
+    @@72:       jnz     @@321
+    @@78:       cmp     dword ptr NtQuerySystemInformation, +$00
+    @@85:       jnz     @@102
+    @@87:       mov     eax, offset @@532
+    @@92:       call    NtProc
+    @@97:       mov     dword ptr NtQuerySystemInformation, eax
+    @@102:      xor     eax, eax
+    @@104:      mov     [ebp-$0C], eax
+    @@107:      lea     eax, [ebp-$0C]
+    @@110:      push    eax
+    @@111:      push    $00
+    @@113:      push    $00
+    @@115:      push    $05
+    @@117:      call    dword ptr NtQuerySystemInformation
+    @@123:      xor     esi, esi
+    @@125:      cmp     dword ptr [ebp-$0C], +$00
+    @@129:      jnz     @@195
+    @@131:      mov     dword ptr [ebp-$0C], $00010000
+    @@138:      mov     eax, [ebp-$0C]
+    @@141:      add     eax, eax
+    @@143:      mov     [ebp-$0C], eax
+    @@146:      push    esi
+    @@147:      call    LocalFree
+    @@152:      mov     eax, [ebp-$0C]
+    @@155:      push    eax
+    @@156:      push    $40
+    @@158:      call    LocalAlloc
+    @@163:      mov     esi, eax
+    @@165:      push    $00
+    @@167:      mov     eax, [ebp-$0C]
+    @@170:      push    eax
+    @@171:      push    esi
+    @@172:      push    $05
+    @@174:      call    dword ptr NtQuerySystemInformation
+    @@180:      test    eax, eax
+    @@182:      jz      @@231
+    @@184:      cmp     dword ptr [ebp-$0C], $00400000
+    @@191:      jnz     @@138
+    @@193:      jmp     @@231
+    @@195:      mov     eax, [ebp-$0C]
+    @@198:      add     eax, eax
+    @@200:      mov     [ebp-$0C], eax
+    @@203:      mov     eax, [ebp-$0C]
+    @@206:      push    eax
+    @@207:      push    $40
+    @@209:      call    LocalAlloc
+    @@214:      mov     esi, eax
+    @@216:      push    $00
+    @@218:      mov     eax, [ebp-$0C]
+    @@221:      push    eax
+    @@222:      push    esi
+    @@223:      push    $05
+    @@225:      call    dword ptr NtQuerySystemInformation
+    @@231:      test    eax, eax
+    @@233:      jnz     @@310
+    @@235:      mov     ebx, esi
+    @@237:      mov     edi, [ebx+$3C]
+    @@240:      test    edi, edi
+    @@242:      jz      @@280
+    @@244:      push    ebp
+    @@245:      push    $00
+    @@247:      lea     edx, [ebp+$FFFFFEC8]
+    @@253:      mov     eax, edi
+    @@255:      call    WideToAnsiEx
+    @@260:      mov     ecx, [ebp+$FFFFFEC8]
+    @@266:      mov     edx, [ebx+$50]
+    @@269:      mov     eax, [ebx+$44]
+    @@272:      call    AddItem
+    @@277:      pop     ecx
+    @@278:      jmp     @@300
+    @@280:      push    ebp
+    @@281:      push    $00
+    @@283:      mov     ecx, offset @@568
+    @@288:      mov     edx, [ebx+$50]
+    @@291:      mov     eax, [ebx+$44]
+    @@294:      call    AddItem
+    @@299:      pop     ecx
+    @@300:      mov     eax, [ebx]
+    @@302:      test    eax, eax
+    @@304:      jz      @@310
+    @@306:      add     ebx, eax
+    @@308:      jmp     @@237
+    @@310:      push    esi
+    @@311:      call    LocalFree
+    @@316:      jmp     @@451
+    @@321:      call    InitToolhelp
+    @@326:      push    $00
+    @@328:      push    $02
+    @@330:      call    dword ptr CreateToolhelp32Snapshot
+    @@336:      mov     [ebp-$0C], eax
+    @@339:      cmp     dword ptr [ebp-$0C], -$01
+    @@343:      jz      @@451
+    @@345:      mov     dword ptr [ebp+$FFFFFECC], $00000128
+    @@355:      lea     eax, [ebp+$FFFFFECC]
+    @@361:      push    eax
+    @@362:      mov     eax, [ebp-$0C]
+    @@365:      push    eax
+    @@366:      call    dword ptr Process32First
+    @@372:      test    eax, eax
+    @@374:      jz      @@442
+    @@376:      push    ebp
+    @@377:      push    $00
+    @@379:      lea     eax, [ebp+$FFFFFEC4]
+    @@385:      lea     edx, [ebp+$FFFFFEF0]
+    @@391:      mov     ecx, $00000104
+    @@396:      call    System.@LStrFromArray
+    @@401:      mov     ecx, [ebp+$FFFFFEC4]
+    @@407:      xor     edx, edx
+    @@409:      mov     eax, [ebp+$FFFFFED4]
+    @@415:      call    AddItem
+    @@420:      pop     ecx
+    @@421:      lea     eax, [ebp+$FFFFFECC]
+    @@427:      push    eax
+    @@428:      mov     eax, [ebp-$0C]
+    @@431:      push    eax
+    @@432:      call    dword ptr Process32Next
+    @@438:      test    eax, eax
+    @@440:      jnz     @@376
+    @@442:      mov     eax, [ebp-$0C]
+    @@445:      push    eax
+    @@446:      call    CloseHandle
+    @@451:      mov     eax, [ebp-$08]
+    @@454:      push    eax
+    @@455:      mov     eax, [ebp-$04]
+    @@458:      mov     ecx, $00000001
+    @@463:      mov     edx, TDAProcess
+    @@469:      call    System.@DynArraySetLength
+    @@474:      add     esp, +$04
+  @@477:      {finally}
+    @@490:      lea     eax, [ebp+$FFFFFEC4]
+    @@496:      mov     edx, $00000002
+    @@501:      call    System.@LStrArrayClr
+  @@506:      {end; finally}
+  @@514:      pop     edi
+  @@515:      pop     esi
+  @@516:      pop     ebx
+  @@517:      {stack frame end}
+
+  @@521:      
+  {
+           0: 00 00 00 FF FF FF FF 18 00 00 00 1B 21 04 20 30      ...ÿÿÿÿ.....!. 0
+          10: 27 2C 06 2C 26 21 30 38 1C 3B 33 3A 27 38 34 21      ',.,&!08.;3:'84!
+          20: 3C 3A 3B 00 00 00 00 FF FF FF FF 10 00 00 00 5B      <:;....ÿÿÿÿ....[
+          30: 53 79 73 74 65 6D 20 50 72 6F 63 65 73 73 5D 00      System Process].
+          40: 00 00 00                                             ...
+  }
+end;
+
+const
+  kernel32pid: DWORD = 
+  {
+           0: 00 00 00 00                                          ....
+  };
+
+function GetKernel32ProcessHandle: DWORD;
+var
+  prcs: TDAProcess;
+  i1: Integer;
+  arrCh: packed array [0..260] of Char;
+asm
+  @@0:        {stack frame start, has local variables}
+  @@9:        push    ebx
+  @@10:       push    esi
+  @@11:       push    edi
+  @@12:       xor     eax, eax
+  @@14:       mov     [ebp+$FFFFFEF0], eax
+  @@20:       mov     [ebp-$04], eax
+  @@23:       {try}
+    @@37:       lea     eax, [ebp-$04]
+    @@40:       mov     edx, TDAProcess
+    @@46:       call    System.@DynArrayClear
+    @@51:       cmp     dword ptr kernel32pid, +$00
+    @@58:       jnz     @@173
+    @@60:       push    $00000104
+    @@65:       lea     eax, [ebp+$FFFFFEF7]
+    @@71:       push    eax
+    @@72:       call    kernel32handle
+    @@77:       push    eax
+    @@78:       call    GetModuleFileName
+    @@83:       lea     eax, [ebp-$04]
+    @@86:       call    EnumProcesses
+    @@91:       mov     eax, [ebp-$04]
+    @@94:       call    System.@DynArrayHigh
+    @@99:       mov     esi, eax
+    @@101:      test    esi, esi
+    @@103:      jl      @@173
+    @@105:      inc     esi
+    @@106:      xor     ebx, ebx
+    @@108:      lea     eax, [ebp+$FFFFFEF0]
+    @@114:      lea     edx, [ebp+$FFFFFEF7]
+    @@120:      mov     ecx, $00000105
+    @@125:      call    System.@LStrFromArray
+    @@130:      mov     edx, [ebp+$FFFFFEF0]
+    @@136:      mov     edi, ebx
+    @@138:      add     edi, edi
+    @@140:      mov     eax, [ebp-$04]
+    @@143:      mov     eax, [eax+edi*8+$04]
+    @@147:      call    IsTextEqual
+    @@152:      test    al, al
+    @@154:      jz      @@169
+    @@156:      mov     eax, [ebp-$04]
+    @@159:      mov     eax, [eax+edi*8]
+    @@162:      mov     dword ptr kernel32pid, eax
+    @@167:      jmp     @@173
+    @@169:      inc     ebx
+    @@170:      dec     esi
+    @@171:      jnz     @@108
+    @@173:      cmp     dword ptr kernel32pid, +$00
+    @@180:      jz      @@201
+    @@182:      mov     eax, dword ptr kernel32pid
+    @@187:      push    eax
+    @@188:      push    $00
+    @@190:      push    $40
+    @@192:      call    OpenProcess
+    @@197:      mov     ebx, eax
+    @@199:      jmp     @@203
+    @@201:      xor     ebx, ebx
+  @@203:      {finally}
+    @@216:      lea     eax, [ebp+$FFFFFEF0]
+    @@222:      call    System.@LStrClr
+    @@227:      lea     eax, [ebp-$04]
+    @@230:      mov     edx, TDAProcess
+    @@236:      call    System.@DynArrayClear
+  @@241:      {end; finally}
+  @@249:      mov     eax, ebx
+  @@251:      pop     edi
+  @@252:      pop     esi
+  @@253:      pop     ebx
+  @@254:      {stack frame end}
+end;
+
+const
+  smsspid: DWORD = 
+  {
+           0: 00 00 00 00                                          ....
+  };
+
+function GetSmssProcessHandle: DWORD;
+var
+  prcs: TDAProcess;
+  i1: Integer;
+  s1: String;
+asm
+  @@0:        {stack frame start}
+  @@3:        push    $00
+  @@5:        push    $00
+  @@7:        push    ebx
+  @@8:        push    esi
+  @@9:        push    edi
+  @@10:       {try}
+    @@24:       lea     eax, [ebp-$04]
+    @@27:       mov     edx, TDAProcess
+    @@33:       call    System.@DynArrayClear
+    @@38:       cmp     dword ptr smsspid, +$00
+    @@45:       jnz     @@125
+    @@47:       lea     edx, [ebp-$08]
+    @@50:       mov     eax, offset @@216
+    @@55:       call    DecryptStr
+    @@60:       lea     eax, [ebp-$04]
+    @@63:       call    EnumProcesses
+    @@68:       mov     eax, [ebp-$04]
+    @@71:       call    System.@DynArrayHigh
+    @@76:       mov     esi, eax
+    @@78:       test    esi, esi
+    @@80:       jl      @@125
+    @@82:       inc     esi
+    @@83:       xor     ebx, ebx
+    @@85:       mov     edi, ebx
+    @@87:       add     edi, edi
+    @@89:       mov     eax, [ebp-$04]
+    @@92:       mov     eax, [eax+edi*8+$04]
+    @@96:       mov     edx, [ebp-$08]
+    @@99:       call    IsTextEqual
+    @@104:      test    al, al
+    @@106:      jz      @@121
+    @@108:      mov     eax, [ebp-$04]
+    @@111:      mov     eax, [eax+edi*8]
+    @@114:      mov     dword ptr smsspid, eax
+    @@119:      jmp     @@125
+    @@121:      inc     ebx
+    @@122:      dec     esi
+    @@123:      jnz     @@85
+    @@125:      cmp     dword ptr smsspid, +$00
+    @@132:      jz      @@153
+    @@134:      mov     eax, dword ptr smsspid
+    @@139:      push    eax
+    @@140:      push    $00
+    @@142:      push    $40
+    @@144:      call    OpenProcess
+    @@149:      mov     ebx, eax
+    @@151:      jmp     @@155
+    @@153:      xor     ebx, ebx
+  @@155:      {finally}
+    @@168:      lea     eax, [ebp-$08]
+    @@171:      call    System.@LStrClr
+    @@176:      lea     eax, [ebp-$04]
+    @@179:      mov     edx, TDAProcess
+    @@185:      call    System.@DynArrayClear
+  @@190:      {end; finally}
+  @@198:      mov     eax, ebx
+  @@200:      pop     edi
+  @@201:      pop     esi
+  @@202:      pop     ebx
+  @@203:      pop     ecx
+  @@204:      pop     ecx
+  @@205:      {stack frame end}
+
+  @@207:      
+  {
+           0: 00 FF FF FF FF 08 00 00 00 06 18 06 06 7B 30 2D      .ÿÿÿÿ........{0-
+          10: 30 00 00 00 00                                       0....
+  }
+end;
+
+function HandleLiveForever(handle: DWORD): DWORD;
+var
+  c1: DWORD;
+asm
+  @@0:        push    ebx
+  @@1:        push    esi
+  @@2:        push    ecx
+  @@3:        mov     esi, eax
+  @@5:        xor     eax, eax
+  @@7:        mov     esp, eax
+  @@10:       call    GetVersion
+  @@15:       test    eax, $80000000
+  @@20:       jnz     @@31
+  @@22:       call    GetSmssProcessHandle
+  @@27:       mov     ebx, eax
+  @@29:       jmp     @@38
+  @@31:       call    GetKernel32ProcessHandle
+  @@36:       mov     ebx, eax
+  @@38:       test    ebx, ebx
+  @@40:       jz      @@72
+  @@42:       push    $02
+  @@44:       push    $00
+  @@46:       push    $00
+  @@48:       lea     eax, esp+$0C
+  @@52:       push    eax
+  @@53:       push    ebx
+  @@54:       push    esi
+  @@55:       call    GetCurrentProcess
+  @@60:       push    eax
+  @@61:       call    DuplicateHandle
+  @@66:       push    ebx
+  @@67:       call    CloseHandle
+  @@72:       mov     eax, esp
+  @@75:       pop     edx
+  @@76:       pop     esi
+  @@77:       pop     ebx
+  @@78:       {ret}
+end;
+
+procedure InitSharedMem9x(alloc: TPPointer; free: TPPointer);
+var
+  comctl: DWORD;
+asm
+  @@0:        {stack frame start}
+  @@3:        push    $00
+  @@5:        push    ebx
+  @@6:        push    esi
+  @@7:        push    edi
+  @@8:        mov     edi, edx
+  @@10:       mov     esi, eax
+  @@12:       {try}
+    @@26:       cmp     dword ptr SharedMem9x_Alloc, +$00
+    @@33:       jnz     @@110
+    @@35:       call    GetVersion
+    @@40:       test    eax, $80000000
+    @@45:       jz      @@110
+    @@47:       lea     edx, [ebp-$04]
+    @@50:       mov     eax, offset @@176
+    @@55:       call    DecryptStr
+    @@60:       mov     eax, [ebp-$04]
+    @@63:       call    System.@LStrToPChar
+    @@68:       push    eax
+    @@69:       call    LoadLibrary
+    @@74:       mov     ebx, eax
+    @@76:       mov     edx, $00000047
+    @@81:       mov     eax, ebx
+    @@83:       call    GetImageProcAddress
+    @@88:       mov     dword ptr SharedMem9x_Alloc, eax
+    @@93:       mov     edx, $00000049
+    @@98:       mov     eax, ebx
+    @@100:      call    GetImageProcAddress
+    @@105:      mov     dword ptr SharedMem9x_Free, eax
+    @@110:      test    esi, esi
+    @@112:      jz      @@121
+    @@114:      mov     eax, dword ptr SharedMem9x_Alloc
+    @@119:      mov     [esi], eax
+    @@121:      test    edi, edi
+    @@123:      jz      @@132
+    @@125:      mov     eax, dword ptr SharedMem9x_Free
+    @@130:      mov     [edi], eax
+  @@132:      {finally}
+    @@145:      lea     eax, [ebp-$04]
+    @@148:      call    System.@LStrClr
+  @@153:      {end; finally}
+  @@161:      pop     edi
+  @@162:      pop     esi
+  @@163:      pop     ebx
+  @@164:      pop     ecx
+  @@165:      {stack frame end}
+
+  @@167:      
+  {
+           0: 00 FF FF FF FF 0C 00 00 00 36 3A 38 36 21 39 66      .ÿÿÿÿ....6:86!9f
+          10: 67 7B 31 39 39 00 00 00 00                           g{199....
+  }
+end;
+
+function AllocMemEx(size: DWORD; processHandle: DWORD = 
+{
+         0: 00 00 00 00                                          ....
+}): Pointer;
+var
+  mbi: TMemoryBasicInformation;
+  p1: Pointer;
+asm
+  @@0:        {stack frame start, has local variables}
+  @@6:        push    ebx
+  @@7:        push    esi
+  @@8:        push    edi
+  @@9:        mov     esi, [ebp+$0C]
+  @@12:       cmp     dword ptr [ebp+$08], +$00
+  @@16:       jbe     @@218
+  @@22:       call    GetVersion
+  @@27:       test    eax, $80000000
+  @@32:       jnz     @@195
+  @@38:       xor     edi, edi
+  @@40:       cmp     dword ptr VirtualAllocEx, +$00
+  @@47:       jnz     @@83
+  @@49:       xor     edx, edx
+  @@51:       mov     eax, offset @@240
+  @@56:       call    KernelProc
+  @@61:       mov     dword ptr VirtualAllocEx, eax
+  @@66:       xor     edx, edx
+  @@68:       mov     eax, offset @@264
+  @@73:       call    KernelProc
+  @@78:       mov     dword ptr VirtualQueryEx, eax
+  @@83:       test    esi, esi
+  @@85:       jnz     @@94
+  @@87:       call    GetCurrentProcess
+  @@92:       mov     esi, eax
+  @@94:       mov     ebx, $716F0000
+  @@99:       jmp     @@153
+  @@101:      cmp     dword ptr [ebp-$0C], $00010000
+  @@108:      jnz     @@136
+  @@110:      push    $40
+  @@112:      push    $00002000
+  @@117:      mov     eax, [ebp+$08]
+  @@120:      push    eax
+  @@121:      mov     eax, [ebp-$1C]
+  @@124:      push    eax
+  @@125:      push    esi
+  @@126:      call    dword ptr VirtualAllocEx
+  @@132:      mov     edi, eax
+  @@134:      jmp     @@172
+  @@136:      mov     eax, [ebp-$18]
+  @@139:      cmp     ebx, eax
+  @@141:      jnz     @@151
+  @@143:      sub     ebx, $00010000
+  @@149:      jmp     @@153
+  @@151:      mov     ebx, eax
+  @@153:      push    $1C
+  @@155:      lea     eax, [ebp-$1C]
+  @@158:      push    eax
+  @@159:      push    ebx
+  @@160:      push    esi
+  @@161:      call    dword ptr VirtualQueryEx
+  @@167:      cmp     eax, +$1C
+  @@170:      jz      @@101
+  @@172:      push    $40
+  @@174:      push    $00001000
+  @@179:      mov     eax, [ebp+$08]
+  @@182:      push    eax
+  @@183:      push    edi
+  @@184:      push    esi
+  @@185:      call    dword ptr VirtualAllocEx
+  @@191:      mov     edi, eax
+  @@193:      jmp     @@220
+  @@195:      xor     edx, edx
+  @@197:      xor     eax, eax
+  @@199:      call    InitSharedMem9x
+  @@204:      mov     eax, [ebp+$08]
+  @@207:      push    eax
+  @@208:      call    dword ptr SharedMem9x_Alloc
+  @@214:      mov     edi, eax
+  @@216:      jmp     @@220
+  @@218:      xor     edi, edi
+  @@220:      mov     eax, edi
+  @@222:      pop     edi
+  @@223:      pop     esi
+  @@224:      pop     ebx
+  @@225:      {stack frame end}
+
+  @@231:      
+  {
+           0: 00 FF FF FF FF 0E 00 00 00 03 3C 27 21 20 34 39      .ÿÿÿÿ.....<'! 49
+          10: 14 39 39 3A 36 10 2D 00 00 FF FF FF FF 0E 00 00      .99:6.-..ÿÿÿÿ...
+          20: 00 03 3C 27 21 20 34 39 04 20 30 27 2C 10 2D 00      ..<'! 49. 0',.-.
+          30: 00                                                   .
+  }
+end;
+
+function FreeMemEx(mem: Pointer; processHandle: DWORD = 
+{
+         0: 00 00 00 00                                          ....
+}): BOOL;
+asm
+  @@0:        {stack frame start}
+  @@3:        push    ebx
+  @@4:        push    esi
+  @@5:        mov     esi, [ebp+$0C]
+  @@8:        mov     ebx, [ebp+$08]
+  @@11:       call    GetVersion
+  @@16:       test    eax, $80000000
+  @@21:       jnz     @@77
+  @@23:       cmp     dword ptr VirtualFreeEx, +$00
+  @@30:       jnz     @@49
+  @@32:       xor     edx, edx
+  @@34:       mov     eax, offset @@132
+  @@39:       call    KernelProc
+  @@44:       mov     dword ptr VirtualFreeEx, eax
+  @@49:       test    esi, esi
+  @@51:       jnz     @@60
+  @@53:       call    GetCurrentProcess
+  @@58:       mov     esi, eax
+  @@60:       push    $00008000
+  @@65:       push    $00
+  @@67:       push    ebx
+  @@68:       push    esi
+  @@69:       call    dword ptr VirtualFreeEx
+  @@75:       jmp     @@115
+  @@77:       xor     edx, edx
+  @@79:       xor     eax, eax
+  @@81:       call    InitSharedMem9x
+  @@86:       cmp     ebx, $80000000
+  @@92:       jb      @@105
+  @@94:       push    ebx
+  @@95:       call    dword ptr SharedMem9x_Free
+  @@101:      test    eax, eax
+  @@103:      jnz     @@109
+  @@105:      xor     eax, eax
+  @@107:      jmp     @@111
+  @@109:      mov     al, $01
+  @@111:      neg     al
+  @@113:      sbb     eax, eax
+  @@115:      pop     esi
+  @@116:      pop     ebx
+  @@117:      {stack frame end}
+
+  @@121:      
+  {
+           0: 00 00 00 FF FF FF FF 0D 00 00 00 03 3C 27 21 20      ...ÿÿÿÿ.....<'!
+          10: 34 39 13 27 30 30 10 2D 00 00 00                     49.'00.-...
+  }
+end;
+
+const
+  VxdCallProc: procedure = VxdCallProc;
+
+  VirtualProtectFunc: procedure = VirtualProtectFunc;
+
+  IsBadWritePtrFunc: procedure = IsBadWritePtrFunc;
+
+  GetVersionFunc: procedure = GetVersionFunc;
+
+procedure InitUnprotectMemory;
+var
+  c1: DWORD;
+asm
+  @@0:        push    ebx
+  @@1:        call    kernel32handle
+  @@6:        mov     ebx, eax
+  @@8:        call    GetVersion
+  @@13:       test    eax, $80000000
+  @@18:       jz      @@46
+  @@20:       cmp     dword ptr VxdCallProc, +$00
+  @@27:       jnz     @@46
+  @@29:       mov     edx, $00000001
+  @@34:       mov     eax, ebx
+  @@36:       call    GetImageProcAddress
+  @@41:       mov     dword ptr VxdCallProc, eax
+  @@46:       cmp     dword ptr VirtualProtectFunc, +$00
+  @@53:       jnz     @@106
+  @@55:       xor     edx, edx
+  @@57:       mov     eax, offset @@116
+  @@62:       call    KernelProc
+  @@67:       mov     dword ptr VirtualProtectFunc, eax
+  @@72:       xor     edx, edx
+  @@74:       mov     eax, offset @@140
+  @@79:       call    KernelProc
+  @@84:       mov     dword ptr IsBadWritePtrFunc, eax
+  @@89:       xor     edx, edx
+  @@91:       mov     eax, offset @@164
+  @@96:       call    KernelProc
+  @@101:      mov     dword ptr GetVersionFunc, eax
+  @@106:      pop     ebx
+  @@107:      {ret}
+
+  @@108:      
+  {
+           0: FF FF FF FF 0E 00 00 00 03 3C 27 21 20 34 39 05      ÿÿÿÿ.....<'! 49.
+          10: 27 3A 21 30 36 21 00 00 FF FF FF FF 0D 00 00 00      ':!06!..ÿÿÿÿ....
+          20: 1C 26 17 34 31 02 27 3C 21 30 05 21 27 00 00 00      .&.41.'<!0.!'...
+          30: FF FF FF FF 0A 00 00 00 12 30 21 03 30 27 26 3C      ÿÿÿÿ.....0!.0'&<
+          40: 3A 3B 00 00                                          :;..
+  }
+end;
+
+function IsMemoryProtected(addr: Pointer): Boolean;
+var
+  mbi: TMemoryBasicInformation;
+asm
+  @@0:        push    ebx
+  @@1:        push    esi
+  @@2:        add     esp, -$1C
+  @@5:        mov     esi, eax
+  @@7:        push    $1C
+  @@9:        lea     eax, esp+$04
+  @@13:       push    eax
+  @@14:       push    esi
+  @@15:       call    VirtualQuery
+  @@20:       cmp     eax, +$1C
+  @@23:       jnz     @@53
+  @@25:       mov     ebx, esp+$14
+  @@29:       test    bl, $40
+  @@32:       jnz     @@49
+  @@34:       test    bl, $80
+  @@37:       jnz     @@49
+  @@39:       test    bl, $04
+  @@42:       jnz     @@49
+  @@44:       test    bl, $08
+  @@47:       jz      @@53
+  @@49:       xor     eax, eax
+  @@51:       jmp     @@55
+  @@53:       mov     al, $01
+  @@55:       add     esp, +$1C
+  @@58:       pop     esi
+  @@59:       pop     ebx
+  @@60:       {ret}
+end;
+
+procedure UnprotectMemoryAsm;
+asm
+  @@0:        {stack frame start}
+  @@3:        mov     ecx, [ebp+$0C]
+  @@6:        mov     edx, [ebp+$08]
+  @@9:        push    $00
+  @@11:       push    esp
+  @@12:       push    $40
+  @@14:       push    ecx
+  @@15:       push    edx
+  @@16:       call    dword ptr VirtualProtectFunc
+  @@22:       pop     ecx
+  @@23:       cmp     eax, +$00
+  @@26:       jz      @@47
+  @@28:       mov     ecx, [ebp+$0C]
+  @@31:       mov     edx, [ebp+$08]
+  @@34:       push    ecx
+  @@35:       push    edx
+  @@36:       call    dword ptr IsBadWritePtrFunc
+  @@42:       cmp     eax, +$00
+  @@45:       jz      @@147
+  @@47:       call    dword ptr GetVersionFunc
+  @@53:       and     eax, $80000000
+  @@58:       cmp     eax, +$00
+  @@61:       jz      @@152
+  @@63:       mov     eax, [ebp+$08]
+  @@66:       and     eax, $80000000
+  @@71:       cmp     eax, +$00
+  @@74:       jz      @@152
+  @@76:       mov     eax, [ebp+$08]
+  @@79:       and     eax, $00000FFF
+  @@84:       add     eax, [ebp+$0C]
+  @@87:       add     eax, +$00000FFF
+  @@92:       shr     eax, $0C
+  @@95:       push    $20060000
+  @@100:      push    $FFFFFFFF
+  @@105:      push    eax
+  @@106:      mov     eax, [ebp+$08]
+  @@109:      shr     eax, $0C
+  @@112:      push    eax
+  @@113:      push    $0001000D
+  @@118:      call    dword ptr VxdCallProc
+  @@124:      mov     ecx, [ebp+$0C]
+  @@127:      mov     edx, [ebp+$08]
+  @@130:      push    ecx
+  @@131:      push    edx
+  @@132:      call    dword ptr IsBadWritePtrFunc
+  @@138:      cmp     eax, +$00
+  @@141:      jz      @@147
+  @@143:      xor     eax, eax
+  @@145:      jmp     @@152
+  @@147:      mov     eax, $00000001
+  @@152:      {stack frame end}
+
+  @@156:      
+  {
+           0: C3                                                   Ã
+  }
+end;
+
+function UnprotectMemory(addr: Pointer; size: DWORD): Boolean;
+asm
+  @@0:        push    edx
+  @@1:        push    eax
+  @@2:        call    UnprotectMemoryAsm
+  @@7:        {ret}
+end;
+
+  procedure ProtectMemoryAsm;
+  asm
+    @@0:        {stack frame start}
+    @@3:        mov     ecx, [ebp+$0C]
+    @@6:        mov     edx, [ebp+$08]
+    @@9:        push    $00
+    @@11:       push    esp
+    @@12:       push    $20
+    @@14:       push    ecx
+    @@15:       push    edx
+    @@16:       call    dword ptr VirtualProtectFunc
+    @@22:       pop     ecx
+    @@23:       cmp     eax, +$00
+    @@26:       jnz     @@125
+    @@28:       call    dword ptr GetVersionFunc
+    @@34:       and     eax, $80000000
+    @@39:       cmp     eax, +$00
+    @@42:       jz      @@130
+    @@44:       mov     eax, [ebp+$08]
+    @@47:       and     eax, $80000000
+    @@52:       cmp     eax, +$00
+    @@55:       jz      @@130
+    @@57:       mov     eax, [ebp+$08]
+    @@60:       and     eax, $00000FFF
+    @@65:       add     eax, [ebp+$0C]
+    @@68:       add     eax, +$00000FFF
+    @@73:       shr     eax, $0C
+    @@76:       push    $00
+    @@78:       push    $FFFDFFFF
+    @@83:       push    eax
+    @@84:       mov     eax, [ebp+$08]
+    @@87:       shr     eax, $0C
+    @@90:       push    eax
+    @@91:       push    $0001000D
+    @@96:       call    dword ptr VxdCallProc
+    @@102:      mov     ecx, [ebp+$0C]
+    @@105:      mov     edx, [ebp+$08]
+    @@108:      push    ecx
+    @@109:      push    edx
+    @@110:      call    dword ptr IsBadWritePtrFunc
+    @@116:      cmp     eax, +$00
+    @@119:      jnz     @@125
+    @@121:      xor     eax, eax
+    @@123:      jmp     @@130
+    @@125:      mov     eax, $00000001
+    @@130:      {stack frame end}
+
+    @@134:      
+    {
+             0: C3                                                   Ã
+    }
+  end;
+
+function ProtectMemory(addr: Pointer; size: DWORD): Boolean;
+asm
+  @@0:        push    edx
+  @@1:        push    eax
+  @@2:        call    ProtectMemoryAsm
+  @@7:        {ret}
+end;
+
+function CopyFunction(func: Pointer; processHandle: DWORD = 
+{
+         0: 00 00 00 00                                          ....
+}; acceptUnknownTargets: Boolean = false; buffer: TPPointer = nil; fi: TPFunctionInfo = nil): Pointer;
+var
+  fi2: TFunctionInfo;
+  s1: String;
+  c1: DWORD;
+  pp1: TPPointer;
+  pp2: TPPointer;
+  i64: Int64;
+  i65: Int64;
+  i1: Integer;
+  p1: Pointer;
+asm
+  @@0:        {stack frame start, has local variables}
+  @@6:        push    ebx
+  @@7:        push    esi
+  @@8:        push    edi
+  @@9:        xor     ebx, ebx
+  @@11:       mov     [ebp-$0C], ebx
+  @@14:       mov     ebx, ecx
+  @@16:       mov     [ebp-$04], edx
+  @@19:       mov     esi, eax
+  @@21:       lea     eax, [ebp-$6C]
+  @@24:       mov     edx, TFunctionInfo
+  @@30:       call    System.@InitializeRecord
+  @@35:       {try}
+    @@49:       xor     eax, eax
+    @@51:       mov     [ebp-$08], eax
+    @@54:       lea     edx, [ebp-$6C]
+    @@57:       mov     eax, esi
+    @@59:       call    ParseFunction
+    @@64:       cmp     byte ptr [ebp-$6C], $00
+    @@68:       jnz     @@84
+    @@70:       mov     eax, [ebp-$58]
+    @@73:       push    eax
+    @@74:       call    SetLastError
+    @@79:       jmp     @@562
+    @@84:       cmp     byte ptr [ebp-$40], $00
+    @@88:       jnz     @@104
+    @@90:       mov     eax, [ebp-$34]
+    @@93:       push    eax
+    @@94:       call    SetLastError
+    @@99:       jmp     @@562
+    @@104:      test    bl, bl
+    @@106:      jnz     @@129
+    @@108:      cmp     dword ptr [ebp-$48], +$00
+    @@112:      jz      @@129
+    @@114:      push    $00770000
+    @@119:      call    SetLastError
+    @@124:      jmp     @@562
+    @@129:      cmp     dword ptr [ebp-$04], +$00
+    @@133:      jz      @@147
+    @@135:      call    GetVersion
+    @@140:      test    eax, $80000000
+    @@145:      jz      @@155
+    @@147:      call    GetCurrentProcess
+    @@152:      mov     [ebp-$04], eax
+    @@155:      mov     eax, [ebp-$04]
+    @@158:      push    eax
+    @@159:      mov     ebx, [ebp-$3C]
+    @@162:      push    ebx
+    @@163:      call    AllocMemEx
+    @@168:      mov     [ebp-$2C], eax
+    @@171:      lea     eax, [ebp-$0C]
+    @@174:      mov     edx, ebx
+    @@176:      call    System.@LStrSetLength
+    @@181:      mov     ebx, [ebp-$0C]
+    @@184:      mov     eax, ebx
+    @@186:      mov     ecx, [ebp-$60]
+    @@189:      add     eax, ecx
+    @@191:      add     eax, +$04
+    @@194:      mov     [ebp-$14], eax
+    @@197:      mov     esi, [ebp-$2C]
+    @@200:      mov     edi, esi
+    @@202:      add     edi, ecx
+    @@204:      add     edi, +$04
+    @@207:      mov     [ebp-$18], edi
+    @@210:      mov     eax, [ebp-$64]
+    @@213:      xor     edx, edx
+    @@215:      push    edx
+    @@216:      push    eax
+    @@217:      mov     eax, ebx
+    @@219:      xor     edx, edx
+    @@221:      sub     dword ptr esp, eax
+    @@224:      sbb     esp+$04, edx
+    @@228:      pop     eax
+    @@229:      pop     edx
+    @@230:      mov     [ebp-$20], eax
+    @@233:      mov     [ebp-$1C], edx
+    @@236:      mov     eax, [ebp-$64]
+    @@239:      xor     edx, edx
+    @@241:      push    edx
+    @@242:      push    eax
+    @@243:      mov     eax, esi
+    @@245:      xor     edx, edx
+    @@247:      sub     dword ptr esp, eax
+    @@250:      sbb     esp+$04, edx
+    @@254:      pop     eax
+    @@255:      pop     edx
+    @@256:      mov     [ebp-$28], eax
+    @@259:      mov     [ebp-$24], edx
+    @@262:      mov     edx, [ebp-$0C]
+    @@265:      mov     eax, [ebp-$64]
+    @@268:      call    Move
+    @@273:      mov     eax, [ebp-$4C]
+    @@276:      call    System.@DynArrayHigh
+    @@281:      mov     esi, eax
+    @@283:      test    esi, esi
+    @@285:      jl      @@460
+    @@291:      inc     esi
+    @@292:      xor     edi, edi
+    @@294:      mov     eax, edi
+    @@296:      shl     eax, $03
+    @@299:      sub     eax, edi
+    @@301:      mov     edx, [ebp-$4C]
+    @@304:      lea     ebx, [edx+eax*4]
+    @@307:      cmp     dword ptr [ebx+$14], +$00
+    @@311:      jnz     @@323
+    @@313:      cmp     dword ptr [ebx+$18], +$00
+    @@317:      jz      @@452
+    @@323:      cmp     byte ptr [ebx+$10], $00
+    @@327:      jz      @@384
+    @@329:      mov     eax, [ebx+$0C]
+    @@332:      call    SolveW9xDebugMode
+    @@337:      xor     edx, edx
+    @@339:      push    edx
+    @@340:      push    eax
+    @@341:      mov     eax, [ebx+$14]
+    @@344:      xor     edx, edx
+    @@346:      sub     eax, dword ptr [ebp-$28]
+    @@349:      sbb     edx, [ebp-$24]
+    @@352:      sub     dword ptr esp, eax
+    @@355:      sbb     esp+$04, edx
+    @@359:      pop     eax
+    @@360:      pop     edx
+    @@361:      sub     eax, +$04
+    @@364:      sbb     edx, +$00
+    @@367:      mov     ecx, eax
+    @@369:      mov     eax, [ebx+$14]
+    @@372:      xor     edx, edx
+    @@374:      sub     eax, dword ptr [ebp-$20]
+    @@377:      sbb     edx, [ebp-$1C]
+    @@380:      mov     [eax], ecx
+    @@382:      jmp     @@452
+    @@384:      cmp     dword ptr [ebx+$18], +$00
+    @@388:      jz      @@429
+    @@390:      mov     eax, [ebx+$0C]
+    @@393:      call    SolveW9xDebugMode
+    @@398:      mov     edx, [ebp-$14]
+    @@401:      mov     [edx], eax
+    @@403:      mov     eax, [ebx+$18]
+    @@406:      xor     edx, edx
+    @@408:      sub     eax, dword ptr [ebp-$20]
+    @@411:      sbb     edx, [ebp-$1C]
+    @@414:      mov     edx, [ebp-$18]
+    @@417:      mov     [eax], edx
+    @@419:      add     dword ptr [ebp-$14], +$04
+    @@423:      add     dword ptr [ebp-$18], +$04
+    @@427:      jmp     @@452
+    @@429:      mov     eax, [ebx+$0C]
+    @@432:      call    SolveW9xDebugMode
+    @@437:      mov     ecx, eax
+    @@439:      mov     eax, [ebx+$14]
+    @@442:      xor     edx, edx
+    @@444:      sub     eax, dword ptr [ebp-$20]
+    @@447:      sbb     edx, [ebp-$1C]
+    @@450:      mov     [eax], ecx
+    @@452:      inc     edi
+    @@453:      dec     esi
+    @@454:      jnz     @@294
+    @@460:      call    InitRemoteProcs
+    @@465:      lea     eax, [ebp-$10]
+    @@468:      push    eax
+    @@469:      mov     eax, [ebp-$0C]
+    @@472:      call    System.@LStrLen
+    @@477:      push    eax
+    @@478:      mov     eax, [ebp-$0C]
+    @@481:      push    eax
+    @@482:      mov     eax, [ebp-$2C]
+    @@485:      push    eax
+    @@486:      mov     eax, [ebp-$04]
+    @@489:      push    eax
+    @@490:      call    dword ptr WriteProcessMemory
+    @@496:      test    eax, eax
+    @@498:      jz      @@525
+    @@500:      mov     eax, [ebp-$0C]
+    @@503:      call    System.@LStrLen
+    @@508:      cmp     eax, [ebp-$10]
+    @@511:      jnz     @@525
+    @@513:      mov     eax, [ebp-$68]
+    @@516:      sub     eax, dword ptr [ebp-$64]
+    @@519:      add     eax, [ebp-$2C]
+    @@522:      mov     [ebp-$08], eax
+    @@525:      cmp     dword ptr [ebp+$0C], +$00
+    @@529:      jz      @@539
+    @@531:      mov     eax, [ebp+$0C]
+    @@534:      mov     edx, [ebp-$2C]
+    @@537:      mov     [eax], edx
+    @@539:      cmp     dword ptr [ebp+$08], +$00
+    @@543:      jz      @@562
+    @@545:      mov     eax, [ebp+$08]
+    @@548:      lea     edx, [ebp-$6C]
+    @@551:      mov     ecx, TFunctionInfo
+    @@557:      call    System.@CopyRecord
+  @@562:      {finally}
+    @@575:      lea     eax, [ebp-$6C]
+    @@578:      mov     edx, TFunctionInfo
+    @@584:      call    System.@FinalizeRecord
+    @@589:      lea     eax, [ebp-$0C]
+    @@592:      call    System.@LStrClr
+  @@597:      {end; finally}
+  @@605:      mov     eax, [ebp-$08]
+  @@608:      pop     edi
+  @@609:      pop     esi
+  @@610:      pop     ebx
+  @@611:      {stack frame end}
+end;
+
+  function GetKernelObjectSecurity(handle: DWORD; requestedInfo: DWORD; sd: PSecurityDescriptor; size: DWORD; var sizeNeeded: DWORD): BOOL;
+  asm
+    @@0:        jmp     dword ptr GetKernelObjectSecurity
+  end;
+
+type
+  T9xRemoteThread = record
+    proc: Pointer;
+    param: Pointer;
+    closeProc: Pointer;
+    errorMode: DWORD;
+    hiddenTh: DWORD;
+  end;
+
+const
+  Close9xProc: Pointer = 
+  {
+           0: 00 00 00 00                                          ....
+  };
+
+  Hidden9xProc: Pointer = 
+  {
+           0: 00 00 00 00                                          ....
+  };
+
+  SetErrorModeFunc: function(mode: DWORD): DWORD; stdcall = SetErrorModeFunc;
+
+  WaitForSingleObjectFunc: function(handle: DWORD; timeOut: DWORD): DWORD; stdcall = WaitForSingleObjectFunc;
+
+  GetCurrentProcessFunc: function: DWORD; stdcall = GetCurrentProcessFunc;
+
+  GetCurrentThreadFunc: function: DWORD; stdcall = GetCurrentThreadFunc;
+
+  DuplicateHandleFunc: function(sph: DWORD; sh: DWORD; dph: DWORD; dh: TPCardinal; access: DWORD; inherit: BOOL; options: DWORD): BOOL; stdcall = DuplicateHandleFunc;
+
+  CloseHandleFunc: function(obj: DWORD): BOOL; stdcall = CloseHandleFunc;
+
+  CreateThreadFunc: function(attr: Pointer; stack: DWORD; proc: Pointer; param: Pointer; flags: DWORD; var tid: DWORD): DWORD; stdcall = CreateThreadFunc;
+
+  GetExitCodeThreadFunc: function(thread: DWORD; var exitCode: DWORD): BOOL; stdcall = GetExitCodeThreadFunc;
+
+  GetCurrentProcessIdFunc: function: DWORD; stdcall = GetCurrentProcessIdFunc;
+
+  SleepProc: procedure(time: DWORD); stdcall = SleepProc;
+
+  function Close9xRemoteThread(var params: T9xRemoteThread): DWORD;
+  asm
+    @@0:        {stack frame start}
+    @@3:        push    ebx
+    @@4:        mov     ebx, [ebp+$08]
+    @@7:        push    $FF
+    @@9:        mov     eax, [ebx+$10]
+    @@12:       push    eax
+    @@13:       call    dword ptr WaitForSingleObjectFunc
+    @@19:       mov     eax, [ebx+$10]
+    @@22:       push    eax
+    @@23:       call    dword ptr CloseHandleFunc
+    @@29:       mov     eax, [ebx+$0C]
+    @@32:       push    eax
+    @@33:       call    dword ptr SetErrorModeFunc
+    @@39:       push    ebx
+    @@40:       call    dword ptr SharedMem9x_Free
+    @@46:       xor     eax, eax
+    @@48:       pop     ebx
+    @@49:       {stack frame end}
+  end;
+
+  function Hidden9xRemoteThread(var params: T9xRemoteThread): DWORD;
+  type
+    T9xHandleItem = packed record
+      access: DWORD;
+      objAddr: DWORD;
+    end;
+
+    T9xHandleTable = packed record
+      itemCount: Integer;
+      items: packed array [0..268435454] of T9xHandleItem;
+    end;
+
+  var
+    th: DWORD;
+    tid: DWORD;
+    pid: DWORD;
+    magic: DWORD;
+    ht: ^T9xHandleTable;
+    i1: Integer;
+    i2: Integer;
+    i3: Integer;
+  asm
+    @@0:        {stack frame start, has local variables}
+    @@6:        push    ebx
+    @@7:        push    esi
+    @@8:        push    edi
+    @@9:        mov     eax, fs:$0030
+    @@16:       mov     [ebp-$04], eax
+    @@19:       xor     eax, eax
+    @@21:       mov     [ebp-$08], eax
+    @@24:       mov     eax, [ebp-$04]
+    @@27:       add     eax, +$44
+    @@30:       mov     ebx, [eax]
+    @@32:       call    dword ptr GetCurrentProcessIdFunc
+    @@38:       xor     eax, [ebp-$04]
+    @@41:       mov     [ebp-$10], eax
+    @@44:       mov     dword ptr [ebp-$14], $00000014
+    @@51:       xor     esi, esi
+    @@53:       mov     edx, [ebx]
+    @@55:       dec     edx
+    @@56:       test    edx, edx
+    @@58:       jl      @@93
+    @@60:       inc     edx
+    @@61:       xor     eax, eax
+    @@63:       mov     edi, [ebx+eax*8+$08]
+    @@67:       test    edi, edi
+    @@69:       jz      @@89
+    @@71:       cmp     edi, [ebp-$10]
+    @@74:       jz      @@89
+    @@76:       test    byte ptr [ebx+eax*8+$07], $80
+    @@81:       jnz     @@89
+    @@83:       inc     esi
+    @@84:       cmp     esi, +$01
+    @@87:       jnle    @@93
+    @@89:       inc     eax
+    @@90:       dec     edx
+    @@91:       jnz     @@63
+    @@93:       dec     esi
+    @@94:       jnle    @@109
+    @@96:       push    $64
+    @@98:       call    dword ptr SleepProc
+    @@104:      dec     dword ptr [ebp-$14]
+    @@107:      jnz     @@51
+    @@109:      mov     eax, [ebp-$04]
+    @@112:      add     eax, +$20
+    @@115:      test    dword ptr [eax], $30800000 
+    @@121:      jnz     @@327
+    @@127:      lea     eax, [ebp-$0C]
+    @@130:      push    eax
+    @@131:      push    $00
+    @@133:      mov     eax, [ebp+$08]
+    @@136:      mov     eax, [eax+$04]
+    @@139:      push    eax
+    @@140:      mov     eax, [ebp+$08]
+    @@143:      mov     eax, [eax]
+    @@145:      push    eax
+    @@146:      push    $00
+    @@148:      push    $00
+    @@150:      call    dword ptr CreateThreadFunc
+    @@156:      mov     ebx, eax
+    @@158:      test    ebx, ebx
+    @@160:      jz      @@315
+    @@166:      push    $FF
+    @@168:      push    ebx
+    @@169:      call    dword ptr WaitForSingleObjectFunc
+    @@175:      lea     eax, [ebp-$08]
+    @@178:      push    eax
+    @@179:      push    ebx
+    @@180:      call    dword ptr GetExitCodeThreadFunc
+    @@186:      mov     eax, [ebp-$04]
+    @@189:      add     eax, +$20
+    @@192:      test    dword ptr [eax], $30800000 
+    @@198:      jnz     @@303
+    @@200:      push    $02
+    @@202:      push    $00
+    @@204:      push    $00
+    @@206:      mov     eax, [ebp+$08]
+    @@209:      add     eax, +$10
+    @@212:      push    eax
+    @@213:      call    dword ptr GetCurrentProcessFunc
+    @@219:      push    eax
+    @@220:      call    dword ptr GetCurrentThreadFunc
+    @@226:      push    eax
+    @@227:      call    dword ptr GetCurrentProcessFunc
+    @@233:      push    eax
+    @@234:      call    dword ptr DuplicateHandleFunc
+    @@240:      test    eax, eax
+    @@242:      jz      @@303
+    @@244:      push    $00008003
+    @@249:      call    dword ptr SetErrorModeFunc
+    @@255:      mov     edx, [ebp+$08]
+    @@258:      mov     [edx+$0C], eax
+    @@261:      lea     eax, [ebp-$0C]
+    @@264:      push    eax
+    @@265:      push    $00
+    @@267:      mov     eax, [ebp+$08]
+    @@270:      push    eax
+    @@271:      mov     eax, [ebp+$08]
+    @@274:      mov     eax, [eax+$08]
+    @@277:      push    eax
+    @@278:      push    $00
+    @@280:      push    $00
+    @@282:      call    dword ptr CreateThreadFunc
+    @@288:      mov     ebx, eax
+    @@290:      test    ebx, ebx
+    @@292:      jz      @@337
+    @@294:      push    ebx
+    @@295:      call    dword ptr CloseHandleFunc
+    @@301:      jmp     @@337
+    @@303:      mov     eax, [ebp+$08]
+    @@306:      push    eax
+    @@307:      call    dword ptr SharedMem9x_Free
+    @@313:      jmp     @@337
+    @@315:      mov     eax, [ebp+$08]
+    @@318:      push    eax
+    @@319:      call    dword ptr SharedMem9x_Free
+    @@325:      jmp     @@337
+    @@327:      mov     eax, [ebp+$08]
+    @@330:      push    eax
+    @@331:      call    dword ptr SharedMem9x_Free
+    @@337:      mov     eax, [ebp-$08]
+    @@340:      pop     edi
+    @@341:      pop     esi
+    @@342:      pop     ebx
+    @@343:      {stack frame end}
+  end;
+
+  function Init9xRemoteThread(var closeProc: Pointer; var hiddenProc: Pointer): Boolean;
+  type
+    TMchRT9x = packed record
+      name: packed array [0..7] of Char;
+      close: Pointer;
+      hidden: Pointer;
+    end;
+
+  var
+    map: DWORD;
+    newMap: Boolean;
+    buf: ^TMchRT9x;
+    s1: String;
+    i1: Integer;
+  asm
+    @@0:        {stack frame start, has local variables}
+    @@6:        push    ebx
+    @@7:        push    esi
+    @@8:        push    edi
+    @@9:        xor     ecx, ecx
+    @@11:       mov     [ebp-$0C], ecx
+    @@14:       mov     esi, edx
+    @@16:       mov     ebx, eax
+    @@18:       {try}
+      @@32:       cmp     dword ptr SetErrorModeFunc, +$00
+      @@39:       jnz     @@215
+      @@45:       xor     edx, edx
+      @@47:       mov     eax, offset @@600
+      @@52:       call    KernelProc
+      @@57:       mov     dword ptr SetErrorModeFunc, eax
+      @@62:       xor     edx, edx
+      @@64:       mov     eax, offset @@624
+      @@69:       call    KernelProc
+      @@74:       mov     dword ptr WaitForSingleObjectFunc, eax
+      @@79:       xor     edx, edx
+      @@81:       mov     eax, offset @@652
+      @@86:       call    KernelProc
+      @@91:       mov     dword ptr GetCurrentProcessFunc, eax
+      @@96:       xor     edx, edx
+      @@98:       mov     eax, offset @@680
+      @@103:      call    KernelProc
+      @@108:      mov     dword ptr GetCurrentThreadFunc, eax
+      @@113:      xor     edx, edx
+      @@115:      mov     eax, offset @@708
+      @@120:      call    KernelProc
+      @@125:      mov     dword ptr DuplicateHandleFunc, eax
+      @@130:      xor     edx, edx
+      @@132:      mov     eax, offset @@732
+      @@137:      call    KernelProc
+      @@142:      mov     dword ptr CloseHandleFunc, eax
+      @@147:      xor     edx, edx
+      @@149:      mov     eax, offset @@752
+      @@154:      call    KernelProc
+      @@159:      mov     dword ptr CreateThreadFunc, eax
+      @@164:      xor     edx, edx
+      @@166:      mov     eax, offset @@776
+      @@171:      call    KernelProc
+      @@176:      mov     dword ptr GetExitCodeThreadFunc, eax
+      @@181:      xor     edx, edx
+      @@183:      mov     eax, offset @@804
+      @@188:      call    KernelProc
+      @@193:      mov     dword ptr GetCurrentProcessIdFunc, eax
+      @@198:      xor     edx, edx
+      @@200:      mov     eax, offset @@832
+      @@205:      call    KernelProc
+      @@210:      mov     dword ptr SleepProc, eax
+      @@215:      cmp     dword ptr Close9xProc, +$00
+      @@222:      jnz     @@519
+      @@228:      call    GetVersion
+      @@233:      test    eax, $80000000
+      @@238:      jz      @@519
+      @@244:      lea     edx, [ebp-$0C]
+      @@247:      mov     eax, offset @@848
+      @@252:      call    DecryptStr
+      @@257:      mov     eax, [ebp-$0C]
+      @@260:      call    System.@LStrToPChar
+      @@265:      push    eax
+      @@266:      push    $10
+      @@268:      push    $00
+      @@270:      push    $04
+      @@272:      push    $00
+      @@274:      push    $FF
+      @@276:      call    CreateFileMapping
+      @@281:      mov     [ebp-$04], eax
+      @@284:      cmp     dword ptr [ebp-$04], +$00
+      @@288:      jz      @@519
+      @@294:      call    GetLastError
+      @@299:      cmp     eax, $000000B7
+      @@304:      setnz   byte ptr [ebp-$05]
+      @@308:      push    $00
+      @@310:      push    $00
+      @@312:      push    $00
+      @@314:      push    $000F001F
+      @@319:      mov     eax, [ebp-$04]
+      @@322:      push    eax
+      @@323:      call    MapViewOfFile
+      @@328:      mov     edi, eax
+      @@330:      test    edi, edi
+      @@332:      jz      @@510
+      @@338:      mov     dword ptr [ebp-$10], $00000032
+      @@345:      cmp     byte ptr [ebp-$05], $00
+      @@349:      jnz     @@391
+      @@351:      mov     eax, [edi]
+      @@353:      mov     edx, [edi+$04]
+      @@356:      push    edx
+      @@357:      push    eax
+      @@358:      mov     eax, [ebp-$0C]
+      @@361:      mov     edx, [eax+$04]
+      @@364:      mov     eax, [eax]
+      @@366:      cmp     edx, esp+$04
+      @@370:      jnz     @@375
+      @@372:      cmp     eax, esp
+      @@375:      pop     edx
+      @@376:      pop     eax
+      @@377:      jz      @@391
+      @@379:      push    $32
+      @@381:      call    Sleep
+      @@386:      dec     dword ptr [ebp-$10]
+      @@389:      jnz     @@345
+      @@391:      cmp     byte ptr [ebp-$05], $00
+      @@395:      jnz     @@425
+      @@397:      mov     eax, [edi]
+      @@399:      mov     edx, [edi+$04]
+      @@402:      push    edx
+      @@403:      push    eax
+      @@404:      mov     eax, [ebp-$0C]
+      @@407:      mov     edx, [eax+$04]
+      @@410:      mov     eax, [eax]
+      @@412:      cmp     edx, esp+$04
+      @@416:      jnz     @@421
+      @@418:      cmp     eax, esp
+      @@421:      pop     edx
+      @@422:      pop     eax
+      @@423:      jz      @@488
+      @@425:      push    $00
+      @@427:      push    $00
+      @@429:      mov     eax, offset Close9xRemoteThread
+      @@434:      xor     ecx, ecx
+      @@436:      xor     edx, edx
+      @@438:      call    CopyFunction
+      @@443:      mov     [edi+$08], eax
+      @@446:      push    $00
+      @@448:      push    $00
+      @@450:      mov     eax, offset Hidden9xRemoteThread
+      @@455:      xor     ecx, ecx
+      @@457:      xor     edx, edx
+      @@459:      call    CopyFunction
+      @@464:      mov     [edi+$0C], eax
+      @@467:      mov     eax, [ebp-$0C]
+      @@470:      mov     edx, [eax]
+      @@472:      mov     [edi], edx
+      @@474:      mov     edx, [eax+$04]
+      @@477:      mov     [edi+$04], edx
+      @@480:      mov     eax, [ebp-$04]
+      @@483:      call    HandleLiveForever
+      @@488:      mov     eax, [edi+$08]
+      @@491:      mov     dword ptr Close9xProc, eax
+      @@496:      mov     eax, [edi+$0C]
+      @@499:      mov     dword ptr Hidden9xProc, eax
+      @@504:      push    edi
+      @@505:      call    UnmapViewOfFile
+      @@510:      mov     eax, [ebp-$04]
+      @@513:      push    eax
+      @@514:      call    CloseHandle
+      @@519:      mov     eax, dword ptr Close9xProc
+      @@524:      mov     [ebx], eax
+      @@526:      mov     eax, dword ptr Hidden9xProc
+      @@531:      mov     [esi], eax
+      @@533:      cmp     dword ptr [ebx], +$00
+      @@536:      jz      @@543
+      @@538:      cmp     dword ptr [esi], +$00
+      @@541:      jnz     @@547
+      @@543:      xor     eax, eax
+      @@545:      jmp     @@549
+      @@547:      mov     al, $01
+      @@549:      mov     ebx, eax
+    @@551:      {finally}
+      @@564:      lea     eax, [ebp-$0C]
+      @@567:      call    System.@LStrClr
+    @@572:      {end; finally}
+    @@580:      mov     eax, ebx
+    @@582:      pop     edi
+    @@583:      pop     esi
+    @@584:      pop     ebx
+    @@585:      {stack frame end}
+
+    @@589:      
+    {
+             0: 00 00 00 FF FF FF FF 0C 00 00 00 06 30 21 10 27      ...ÿÿÿÿ.....0!.'
+            10: 27 3A 27 18 3A 31 30 00 00 00 00 FF FF FF FF 13      ':'.:10....ÿÿÿÿ.
+            20: 00 00 00 02 34 3C 21 13 3A 27 06 3C 3B 32 39 30      ....4<!.:'.<;290
+            30: 1A 37 3F 30 36 21 00 FF FF FF FF 11 00 00 00 12      .7?06!.ÿÿÿÿ.....
+            40: 30 21 16 20 27 27 30 3B 21 05 27 3A 36 30 26 26      0!. ''0;!.':60&&
+            50: 00 00 00 FF FF FF FF 10 00 00 00 12 30 21 16 20      ...ÿÿÿÿ.....0!.
+            60: 27 27 30 3B 21 01 3D 27 30 34 31 00 00 00 00 FF      ''0;!.='041....ÿ
+            70: FF FF FF 0F 00 00 00 11 20 25 39 3C 36 34 21 30      ÿÿÿ..... %9<64!0
+            80: 1D 34 3B 31 39 30 00 FF FF FF FF 0B 00 00 00 16      .4;190.ÿÿÿÿ.....
+            90: 39 3A 26 30 1D 34 3B 31 39 30 00 FF FF FF FF 0C      9:&0.4;190.ÿÿÿÿ.
+            A0: 00 00 00 16 27 30 34 21 30 01 3D 27 30 34 31 00      ....'04!0.='041.
+            B0: 00 00 00 FF FF FF FF 11 00 00 00 12 30 21 10 2D      ...ÿÿÿÿ.....0!.-
+            C0: 3C 21 16 3A 31 30 01 3D 27 30 34 31 00 00 00 FF      <!.:10.='041...ÿ
+            D0: FF FF FF 13 00 00 00 12 30 21 16 20 27 27 30 3B      ÿÿÿ.....0!. ''0;
+            E0: 21 05 27 3A 36 30 26 26 1C 31 00 FF FF FF FF 05      !.':60&&.1.ÿÿÿÿ.
+            F0: 00 00 00 06 39 30 30 25 00 00 00 FF FF FF FF 07      ....900%...ÿÿÿÿ.
+           100: 00 00 00 38 36 3D 07 01 6C 2D 00                     ...86=..l-.
+    }
+  end;
+
+function CreateRemoteThreadEx(processHandle: DWORD; threadAttr: PSecurityAttributes; stackSize: Integer; startAddr: Pointer; params: Pointer; creationFlags: DWORD; var threadId: DWORD): DWORD;
+type
+  TExitThreadFrame = packed record
+    pushParam: DWORD;
+    movEaxThreadProc: packed record
+      opcode: Byte;
+      threadProc: Pointer;
+    end;
+    callThreadProc: Word;
+    pushResult: Byte;
+    pushDummy: Byte;
+    pushMemRelease: packed record
+      opcode: Byte;
+      memRelease: DWORD;
+    end;
+    pushSize: Word;
+    pushAddr: packed record
+      opcode: Byte;
+      frameAddr: Pointer;
+    end;
+    pushExitThread: packed record
+      opcode: Byte;
+      exitThread: Pointer;
+    end;
+    movEaxVirtualFree: packed record
+      opcode: Byte;
+      virtualFree: Pointer;
+    end;
+    jmpVirtualFree: Word;
+  end;
+
+const
+  STACK_SIZE_PARAM_IS_A_RESERVATION = 65536;
+
+var
+  pid: DWORD;
+  ppid: Pointer;
+  fi: TFunctionInfo;
+  p1: Pointer;
+  proc2: Pointer;
+  pp1: TPPointer;
+  c1: DWORD;
+  c2: DWORD;
+  proc1: function(threadAttr: PSecurityAttributes; stackSize: Integer; startAddr: Pointer; params: Pointer; crFlags: DWORD; var tid: DWORD): DWORD; stdcall;
+  client: array [0..1] of DWORD;
+  rcut: function(processHandle: DWORD; securityDescr: PSecurityDescriptor; createSuspended: BOOL; stackZeroBits: DWORD; stackReserved: TPCardinal; stackCommit: TPCardinal; startAddress: Pointer; parameter: Pointer; var threadHandle: DWORD; var clientID: Int64): Integer; stdcall;
+  psd: PSecurityDescriptor;
+  pssr: TPCardinal;
+  pssc: TPCardinal;
+  sa: TSecurityAttributes;
+  sd: PSecurityDescriptor;
+  i1: Integer;
+  rt9x: ^T9xRemoteThread;
+  ci: TCodeInfo;
+  k97: procedure(param: DWORD); stdcall;
+  k98: procedure(param: DWORD); stdcall;
+  etf: TExitThreadFrame;
+  petf: ^TExitThreadFrame;
+
+  function FindPCurP9xPid(const fi: TFunctionInfo): TPPointer;
+  var
+    i1: Integer;
+    i2: Integer;
+
+    function CheckPCurP9xPid(PCurP9xPid: DWORD): Boolean;
+    var
+      c1: DWORD;
+    asm
+      @@0:        {stack frame start}
+      @@3:        push    ecx
+      @@4:        push    ebx
+      @@5:        mov     ebx, eax
+      @@7:        push    $00
+      @@9:        lea     edx, [ebp-$04]
+      @@12:       mov     eax, [ebx]
+      @@14:       mov     ecx, $00000004
+      @@19:       call    TryRead
+      @@24:       test    al, al
+      @@26:       jz      @@69
+      @@28:       push    $00
+      @@30:       lea     edx, [ebp-$04]
+      @@33:       mov     ecx, $00000004
+      @@38:       mov     eax, [ebp-$04]
+      @@41:       call    TryRead
+      @@46:       test    al, al
+      @@48:       jz      @@69
+      @@50:       call    GetCurrentProcessId
+      @@55:       mov     ebx, eax
+      @@57:       call    Magic
+      @@62:       xor     ebx, eax
+      @@64:       cmp     ebx, [ebp-$04]
+      @@67:       jz      @@73
+      @@69:       xor     eax, eax
+      @@71:       jmp     @@75
+      @@73:       mov     al, $01
+      @@75:       pop     ebx
+      @@76:       pop     ecx
+      @@77:       {stack frame end}
+    end;
+  asm
+    @@0:        {stack frame start}
+    @@3:        push    ecx
+    @@4:        push    ebx
+    @@5:        push    esi
+    @@6:        push    edi
+    @@7:        mov     ebx, eax
+    @@9:        xor     eax, eax
+    @@11:       mov     [ebp-$04], eax
+    @@14:       mov     eax, [ebx+$20]
+    @@17:       call    System.@DynArrayHigh
+    @@22:       mov     edi, eax
+    @@24:       cmp     edi, +$00
+    @@27:       jl      @@127
+    @@29:       mov     esi, edi
+    @@31:       dec     esi
+    @@32:       cmp     esi, +$00
+    @@35:       jl      @@121
+    @@37:       mov     eax, edi
+    @@39:       shl     eax, $03
+    @@42:       sub     eax, edi
+    @@44:       mov     edx, [ebx+$20]
+    @@47:       mov     eax, [edx+eax*4+$0C]
+    @@51:       mov     edx, esi
+    @@53:       shl     edx, $03
+    @@56:       sub     edx, esi
+    @@58:       mov     ecx, [ebx+$20]
+    @@61:       cmp     eax, [ecx+edx*4+$0C]
+    @@65:       jnz     @@115
+    @@67:       mov     eax, edi
+    @@69:       shl     eax, $03
+    @@72:       sub     eax, edi
+    @@74:       mov     edx, [ebx+$20]
+    @@77:       mov     eax, [edx+eax*4+$04]
+    @@81:       sub     eax, +$06
+    @@84:       call    CheckPCurP9xPid
+    @@89:       test    al, al
+    @@91:       jz      @@115
+    @@93:       mov     eax, edi
+    @@95:       shl     eax, $03
+    @@98:       sub     eax, edi
+    @@100:      mov     edx, [ebx+$20]
+    @@103:      mov     eax, [edx+eax*4+$04]
+    @@107:      sub     eax, +$06
+    @@110:      mov     [ebp-$04], eax
+    @@113:      jmp     @@127
+    @@115:      dec     esi
+    @@116:      cmp     esi, -$01
+    @@119:      jnz     @@37
+    @@121:      dec     edi
+    @@122:      cmp     edi, -$01
+    @@125:      jnz     @@29
+    @@127:      mov     eax, [ebp-$04]
+    @@130:      pop     edi
+    @@131:      pop     esi
+    @@132:      pop     ebx
+    @@133:      pop     ecx
+    @@134:      {stack frame end}
+  end;
+
+  function GetSessionId(processId: DWORD): DWORD;
+  var
+    pid2sid: function(processId: DWORD; var sessionId: DWORD): BOOL; stdcall;
+  asm
+    @@0:        {stack frame start}
+    @@3:        push    ecx
+    @@4:        push    ebx
+    @@5:        push    esi
+    @@6:        mov     esi, eax
+    @@8:        xor     edx, edx
+    @@10:       mov     eax, offset @@60
+    @@15:       call    KernelProc
+    @@20:       mov     ebx, eax
+    @@22:       test    ebx, ebx
+    @@24:       jz      @@37
+    @@26:       lea     eax, [ebp-$04]
+    @@29:       push    eax
+    @@30:       push    esi
+    @@31:       call    ebx
+    @@33:       test    eax, eax
+    @@35:       jnz     @@42
+    @@37:       xor     eax, eax
+    @@39:       mov     [ebp-$04], eax
+    @@42:       mov     eax, [ebp-$04]
+    @@45:       pop     esi
+    @@46:       pop     ebx
+    @@47:       pop     ecx
+    @@48:       {stack frame end}
+
+    @@50:       
+    {
+             0: 00 00 FF FF FF FF 14 00 00 00 05 27 3A 36 30 26      ..ÿÿÿÿ.....':60&
+            10: 26 1C 31 01 3A 06 30 26 26 3C 3A 3B 1C 31 00 00      &.1.:.0&&<:;.1..
+            20: 00 00                                                ..
+    }
+  end;
+
+  function Is16BitProcess(processID: DWORD): Boolean;
+  asm
+    @@0:        {stack frame start}
+    @@3:        push    ecx
+    @@4:        push    ebx
+    @@5:        push    esi
+    @@6:        push    edi
+    @@7:        mov     ebx, eax
+    @@9:        mov     byte ptr [ebp-$01], $00
+    @@13:       call    GetVersion
+    @@18:       test    eax, $80000000
+    @@23:       jz      @@74
+    @@25:       {try}
+      @@39:       call    Magic
+      @@44:       xor     ebx, eax
+      @@46:       test    byte ptr [ebx+$20], $18
+      @@50:       setnz   byte ptr [ebp-$01]
+    @@54:       {except(short)}
+    @@69:       {end; except}
+    @@74:       mov     al, byte ptr [ebp-$01]
+    @@77:       pop     edi
+    @@78:       pop     esi
+    @@79:       pop     ebx
+    @@80:       pop     ecx
+    @@81:       {stack frame end}
+  end;
+
+const
+  CExitThreadFrame: TExitThreadFrame = 
+  (
+    pushParam: 
+    {
+             0: FF 74 24 04                                          ÿt$.
+    };
+    movEaxThreadProc: 
+    (
+      opcode: 184;
+      threadProc: 
+      {
+               0: 00 00 00 00                                          ....
+      }
+    );
+    callThreadProc: 53503;
+    pushResult: 80;
+    pushDummy: 80;
+    pushMemRelease: 
+    (
+      opcode: 104;
+      memRelease: 
+      {
+               0: 00 80 00 00                                          .€..
+      }
+    );
+    pushSize: 106;
+    pushAddr: 
+    (
+      opcode: 104;
+      frameAddr: 
+      {
+               0: 00 00 00 00                                          ....
+      }
+    );
+    pushExitThread: 
+    (
+      opcode: 104;
+      exitThread: 
+      {
+               0: 00 00 00 00                                          ....
+      }
+    );
+    movEaxVirtualFree: 
+    (
+      opcode: 184;
+      virtualFree: 
+      {
+               0: 00 00 00 00                                          ....
+      }
+    );
+    jmpVirtualFree: 57599
+  );
+asm
+  @@0:        {stack frame start}
+  @@3:        mov     ecx, $00000030
+  @@8:        push    $00
+  @@10:       push    $00
+  @@12:       dec     ecx
+  @@13:       jnz     @@8
+  @@15:       push    ecx
+  @@16:       push    ebx
+  @@17:       push    esi
+  @@18:       push    edi
+  @@19:       mov     edi, [ebp+$0C]
+  @@22:       mov     ebx, [ebp+$08]
+  @@25:       lea     eax, [ebp+$FFFFFF78]
+  @@31:       mov     edx, TFunctionInfo
+  @@37:       call    System.@InitializeRecord
+  @@42:       {try}
+    @@56:       xor     eax, eax
+    @@58:       mov     [ebp-$04], eax
+    @@61:       call    GetVersion
+    @@66:       test    eax, $80000000
+    @@71:       jz      @@1205
+    @@77:       test    ebx, ebx
+    @@79:       jz      @@1193
+    @@85:       cmp     ebx, -$01
+    @@88:       jz      @@1193
+    @@94:       push    ebx
+    @@95:       call    ProcessHandleToId
+    @@100:      mov     [ebp-$08], eax
+    @@103:      cmp     dword ptr [ebp-$08], +$00
+    @@107:      jz      @@1181
+    @@113:      call    Magic
+    @@118:      cmp     eax, [ebp-$08]
+    @@121:      jz      @@1181
+    @@127:      mov     eax, [ebp-$08]
+    @@130:      call    Is16BitProcess
+    @@135:      test    al, al
+    @@137:      jnz     @@1181
+    @@143:      push    $78
+    @@145:      call    SetLastError
+    @@150:      call    Magic
+    @@155:      xor     [ebp-$08], eax
+    @@158:      lea     eax, [ebp-$08]
+    @@161:      mov     [ebp-$0C], eax
+    @@164:      xor     edx, edx
+    @@166:      mov     eax, offset @@1772
+    @@171:      call    KernelProc
+    @@176:      lea     edx, [ebp+$FFFFFF78]
+    @@182:      call    ParseFunction
+    @@187:      mov     eax, [ebp-$6C]
+    @@190:      call    System.@DynArrayLength
+    @@195:      cmp     eax, +$07
+    @@198:      jl      @@1690
+    @@204:      mov     eax, [ebp-$6C]
+    @@207:      call    System.@DynArrayHigh
+    @@212:      add     eax, eax
+    @@214:      lea     eax, [eax+eax*2]
+    @@217:      mov     edx, [ebp-$6C]
+    @@220:      mov     eax, [edx+eax*8+$FFFFFF40]
+    @@227:      lea     edx, [ebp+$FFFFFEE0]
+    @@233:      call    ParseFunction
+    @@238:      lea     edx, [ebp+$FFFFFEE0]
+    @@244:      lea     eax, [ebp+$FFFFFF78]
+    @@250:      mov     ecx, TFunctionInfo
+    @@256:      call    System.@CopyRecord
+    @@261:      cmp     dword ptr [ebp-$7C], $000000C8
+    @@268:      jnl     @@1690
+    @@274:      mov     eax, [ebp-$68]
+    @@277:      call    System.@DynArrayLength
+    @@282:      cmp     eax, +$05
+    @@285:      jl      @@1690
+    @@291:      mov     eax, [ebp-$68]
+    @@294:      call    System.@DynArrayHigh
+    @@299:      mov     edx, eax
+    @@301:      shl     eax, $03
+    @@304:      sub     eax, edx
+    @@306:      mov     edx, [ebp-$68]
+    @@309:      mov     ebx, [edx+eax*4+$0C]
+    @@313:      mov     eax, [ebp-$68]
+    @@316:      call    System.@DynArrayHigh
+    @@321:      mov     edx, eax
+    @@323:      shl     eax, $03
+    @@326:      sub     eax, edx
+    @@328:      mov     edx, [ebp-$68]
+    @@331:      cmp     ebx, [edx+eax*4-$10]
+    @@335:      jnz     @@1690
+    @@341:      mov     eax, [ebp+$FFFFFF7C]
+    @@347:      mov     [ebp-$10], eax
+    @@350:      mov     eax, [ebp-$68]
+    @@353:      call    System.@DynArrayHigh
+    @@358:      mov     edx, eax
+    @@360:      shl     eax, $03
+    @@363:      sub     eax, edx
+    @@365:      mov     edx, [ebp-$68]
+    @@368:      mov     eax, [edx+eax*4-$2C]
+    @@372:      lea     edx, [ebp+$FFFFFEA0]
+    @@378:      call    ParseFunction
+    @@383:      lea     edx, [ebp+$FFFFFEA0]
+    @@389:      lea     eax, [ebp+$FFFFFF78]
+    @@395:      mov     ecx, TFunctionInfo
+    @@401:      call    System.@CopyRecord
+    @@406:      cmp     dword ptr [ebp-$7C], $000001F4
+    @@413:      jnl     @@1690
+    @@419:      lea     eax, [ebp+$FFFFFF78]
+    @@425:      call    FindPCurP9xPid
+    @@430:      test    eax, eax
+    @@432:      jz      @@1690
+    @@438:      push    $00
+    @@440:      push    $00
+    @@442:      xor     ecx, ecx
+    @@444:      xor     edx, edx
+    @@446:      mov     eax, [ebp+$FFFFFF7C]
+    @@452:      call    CopyFunction
+    @@457:      mov     [ebp-$14], eax
+    @@460:      {try}
+      @@474:      lea     edx, [ebp+$FFFFFF78]
+      @@480:      mov     eax, [ebp-$14]
+      @@483:      call    ParseFunction
+      @@488:      lea     eax, [ebp+$FFFFFF78]
+      @@494:      call    FindPCurP9xPid
+      @@499:      test    eax, eax
+      @@501:      jz      @@1149
+      @@507:      lea     edx, [ebp-$0C]
+      @@510:      mov     [eax], edx
+      @@512:      push    $00
+      @@514:      push    $00
+      @@516:      xor     ecx, ecx
+      @@518:      xor     edx, edx
+      @@520:      mov     eax, [ebp-$10]
+      @@523:      call    CopyFunction
+      @@528:      mov     [ebp-$20], eax
+      @@531:      {try}
+        @@545:      lea     edx, [ebp+$FFFFFF78]
+        @@551:      mov     eax, [ebp-$20]
+        @@554:      call    ParseFunction
+        @@559:      mov     eax, [ebp-$68]
+        @@562:      call    System.@DynArrayHigh
+        @@567:      mov     edx, eax
+        @@569:      shl     eax, $03
+        @@572:      sub     eax, edx
+        @@574:      mov     edx, [ebp-$68]
+        @@577:      lea     esi, [edx+eax*4-$38]
+        @@581:      mov     eax, [ebp-$14]
+        @@584:      xor     edx, edx
+        @@586:      push    edx
+        @@587:      push    eax
+        @@588:      mov     eax, [esi+$08]
+        @@591:      xor     edx, edx
+        @@593:      sub     dword ptr esp, eax
+        @@596:      sbb     esp+$04, edx
+        @@600:      pop     eax
+        @@601:      pop     edx
+        @@602:      mov     edx, [esi+$14]
+        @@605:      mov     [edx], eax
+        @@607:      mov     eax, [ebp-$6C]
+        @@610:      call    System.@DynArrayHigh
+        @@615:      test    eax, eax
+        @@617:      jl      @@687
+        @@619:      inc     eax
+        @@620:      mov     [ebp-$48], eax
+        @@623:      xor     ebx, ebx
+        @@625:      mov     eax, ebx
+        @@627:      add     eax, eax
+        @@629:      lea     eax, [eax+eax*2]
+        @@632:      mov     edx, [ebp-$6C]
+        @@635:      mov     edx, [edx+eax*8]
+        @@638:      cmp     edx, [esi+$04]
+        @@641:      jnb     @@681
+        @@643:      mov     edx, [ebp-$6C]
+        @@646:      mov     edx, [edx+eax*8+$04]
+        @@650:      cmp     edx, [esi+$04]
+        @@653:      jbe     @@681
+        @@655:      mov     edx, [ebp-$6C]
+        @@658:      mov     edx, [edx+eax*8]
+        @@661:      cmp     word ptr [edx], $086A
+        @@666:      jnz     @@681
+        @@668:      mov     edx, [ebp-$6C]
+        @@671:      mov     eax, [edx+eax*8]
+        @@674:      mov     word ptr [eax], $186A
+        @@679:      jmp     @@687
+        @@681:      inc     ebx
+        @@682:      dec     dword ptr [ebp-$48]
+        @@685:      jnz     @@625
+        @@687:      cmp     dword ptr [ebp+$10], +$00
+        @@691:      jnz     @@702
+        @@693:      mov     dword ptr [ebp+$10], $FFFFD000
+        @@700:      jmp     @@711
+        @@702:      cmp     dword ptr [ebp+$10], +$00
+        @@706:      jle     @@711
+        @@708:      neg     dword ptr [ebp+$10] 
+        @@711:      push    $00
+        @@713:      push    $14
+        @@715:      call    AllocMemEx
+        @@720:      mov     [ebp-$3C], eax
+        @@723:      mov     eax, [ebp-$3C]
+        @@726:      mov     edx, [ebp+$14]
+        @@729:      mov     [eax], edx
+        @@731:      mov     eax, [ebp-$3C]
+        @@734:      mov     edx, [ebp+$18]
+        @@737:      mov     [eax+$04], edx
+        @@740:      xor     eax, eax
+        @@742:      mov     [ebp-$18], eax
+        @@745:      xor     eax, eax
+        @@747:      mov     [ebp-$1C], eax
+        @@750:      xor     edx, edx
+        @@752:      mov     eax, offset @@1796
+        @@757:      call    KernelProc
+        @@762:      lea     edx, [ebp+$FFFFFF48]
+        @@768:      call    ParseCode
+        @@773:      mov     ebx, $0000000A
+        @@778:      cmp     word ptr [ebp+$FFFFFF4A], $00A1
+        @@787:      jnz     @@821
+        @@789:      cmp     dword ptr [ebp-$18], +$00
+        @@793:      jz      @@809
+        @@795:      mov     eax, [ebp+$FFFFFF64]
+        @@801:      inc     eax
+        @@802:      mov     eax, [eax]
+        @@804:      mov     [ebp-$1C], eax
+        @@807:      jmp     @@862
+        @@809:      mov     eax, [ebp+$FFFFFF64]
+        @@815:      inc     eax
+        @@816:      mov     eax, [eax]
+        @@818:      mov     [ebp-$18], eax
+        @@821:      lea     edx, [ebp+$FFFFFE7C]
+        @@827:      mov     eax, [ebp+$FFFFFF68]
+        @@833:      call    ParseCode
+        @@838:      push    edi
+        @@839:      lea     esi, [ebp+$FFFFFE7C]
+        @@845:      lea     edi, [ebp+$FFFFFF48]
+        @@851:      mov     ecx, $00000009
+        @@856:      rep
+        @@857:      movsd
+        @@858:      pop     edi
+        @@859:      dec     ebx
+        @@860:      jnz     @@778
+        @@862:      cmp     dword ptr [ebp-$18], +$00
+        @@866:      jnz     @@874
+        @@868:      cmp     dword ptr [ebp-$1C], +$00
+        @@872:      jz      @@954
+        @@874:      call    kernel32handle
+        @@879:      mov     edx, $00000061
+        @@884:      call    GetImageProcAddress
+        @@889:      mov     [ebp-$40], eax
+        @@892:      call    kernel32handle
+        @@897:      mov     edx, $00000062
+        @@902:      call    GetImageProcAddress
+        @@907:      mov     [ebp-$44], eax
+        @@910:      cmp     dword ptr [ebp-$40], +$00
+        @@914:      jz      @@964
+        @@916:      cmp     dword ptr [ebp-$44], +$00
+        @@920:      jz      @@964
+        @@922:      cmp     dword ptr [ebp-$18], +$00
+        @@926:      jz      @@937
+        @@928:      mov     eax, [ebp-$18]
+        @@931:      mov     eax, [eax]
+        @@933:      push    eax
+        @@934:      call    dword ptr [ebp-$40]
+        @@937:      cmp     dword ptr [ebp-$1C], +$00
+        @@941:      jz      @@964
+        @@943:      mov     eax, [ebp-$1C]
+        @@946:      mov     eax, [eax]
+        @@948:      push    eax
+        @@949:      call    dword ptr [ebp-$40]
+        @@952:      jmp     @@964
+        @@954:      xor     eax, eax
+        @@956:      mov     [ebp-$40], eax
+        @@959:      xor     eax, eax
+        @@961:      mov     [ebp-$44], eax
+        @@964:      {try}
+          @@978:      lea     edx, [ebp-$10]
+          @@981:      mov     eax, [ebp-$3C]
+          @@984:      add     eax, +$08
+          @@987:      call    Init9xRemoteThread
+          @@992:      test    al, al
+          @@994:      jz      @@1037
+          @@996:      mov     eax, [ebp-$08]
+          @@999:      add     eax, +$20
+          @@1002:     test    dword ptr [eax], $30800000 
+          @@1008:     jnz     @@1037
+          @@1010:     mov     eax, [ebp+$20]
+          @@1013:     push    eax
+          @@1014:     mov     eax, [ebp+$1C]
+          @@1017:     push    eax
+          @@1018:     mov     eax, [ebp-$3C]
+          @@1021:     push    eax
+          @@1022:     mov     eax, [ebp-$10]
+          @@1025:     push    eax
+          @@1026:     mov     eax, [ebp+$10]
+          @@1029:     push    eax
+          @@1030:     push    edi
+          @@1031:     call    dword ptr [ebp-$20]
+          @@1034:     mov     [ebp-$04], eax
+        @@1037:     {finally}
+          @@1050:     cmp     dword ptr [ebp-$40], +$00
+          @@1054:     jz      @@1092
+          @@1056:     cmp     dword ptr [ebp-$44], +$00
+          @@1060:     jz      @@1092
+          @@1062:     cmp     dword ptr [ebp-$1C], +$00
+          @@1066:     jz      @@1077
+          @@1068:     mov     eax, [ebp-$1C]
+          @@1071:     mov     eax, [eax]
+          @@1073:     push    eax
+          @@1074:     call    dword ptr [ebp-$44]
+          @@1077:     cmp     dword ptr [ebp-$18], +$00
+          @@1081:     jz      @@1092
+          @@1083:     mov     eax, [ebp-$18]
+          @@1086:     mov     eax, [eax]
+          @@1088:     push    eax
+          @@1089:     call    dword ptr [ebp-$44]
+        @@1092:     {end; finally}
+        @@1100:     cmp     dword ptr [ebp-$04], +$00
+        @@1104:     jnz     @@1117
+        @@1106:     push    $00
+        @@1108:     mov     eax, [ebp-$3C]
+        @@1111:     push    eax
+        @@1112:     call    FreeMemEx
+      @@1117:     {finally}
+        @@1130:     push    $00
+        @@1132:     mov     eax, [ebp-$20]
+        @@1135:     push    eax
+        @@1136:     call    FreeMemEx
+      @@1141:     {end; finally}
+    @@1149:     {finally}
+      @@1162:     push    $00
+      @@1164:     mov     eax, [ebp-$14]
+      @@1167:     push    eax
+      @@1168:     call    FreeMemEx
+    @@1173:     {end; finally}
+    @@1181:     push    $57
+    @@1183:     call    SetLastError
+    @@1188:     jmp     @@1690
+    @@1193:     push    $57
+    @@1195:     call    SetLastError
+    @@1200:     jmp     @@1690
+    @@1205:     xor     esi, esi
+    @@1207:     test    edi, edi
+    @@1209:     jnz     @@1359
+    @@1215:     push    $02
+    @@1217:     push    $00
+    @@1219:     push    $00
+    @@1221:     lea     eax, [ebp-$1C]
+    @@1224:     push    eax
+    @@1225:     call    GetCurrentProcess
+    @@1230:     push    eax
+    @@1231:     call    GetCurrentThread
+    @@1236:     push    eax
+    @@1237:     call    GetCurrentProcess
+    @@1242:     push    eax
+    @@1243:     call    DuplicateHandle
+    @@1248:     test    eax, eax
+    @@1250:     jz      @@1359
+    @@1252:     xor     eax, eax
+    @@1254:     mov     [ebp-$18], eax
+    @@1257:     lea     eax, [ebp-$18]
+    @@1260:     push    eax
+    @@1261:     push    $00
+    @@1263:     push    $00
+    @@1265:     push    $04
+    @@1267:     mov     eax, [ebp-$1C]
+    @@1270:     push    eax
+    @@1271:     call    GetKernelObjectSecurity
+    @@1276:     cmp     dword ptr [ebp-$18], +$00
+    @@1280:     jbe     @@1350
+    @@1282:     mov     eax, [ebp-$18]
+    @@1285:     add     eax, eax
+    @@1287:     call    System.@GetMem
+    @@1292:     mov     esi, eax
+    @@1294:     lea     eax, [ebp-$18]
+    @@1297:     push    eax
+    @@1298:     mov     eax, [ebp-$18]
+    @@1301:     add     eax, eax
+    @@1303:     push    eax
+    @@1304:     push    esi
+    @@1305:     push    $04
+    @@1307:     mov     eax, [ebp-$1C]
+    @@1310:     push    eax
+    @@1311:     call    GetKernelObjectSecurity
+    @@1316:     test    eax, eax
+    @@1318:     jz      @@1350
+    @@1320:     mov     dword ptr [ebp+$FFFFFF6C], $0000000C
+    @@1330:     mov     [ebp+$FFFFFF70], esi
+    @@1336:     xor     eax, eax
+    @@1338:     mov     [ebp+$FFFFFF74], eax
+    @@1344:     lea     edi, [ebp+$FFFFFF6C]
+    @@1350:     mov     eax, [ebp-$1C]
+    @@1353:     push    eax
+    @@1354:     call    CloseHandle
+    @@1359:     call    InitRemoteProcs
+    @@1364:     call    GetCurrentProcessId
+    @@1369:     call    GetSessionId
+    @@1374:     mov     [ebp-$18], eax
+    @@1377:     push    ebx
+    @@1378:     call    ProcessHandleToId
+    @@1383:     call    GetSessionId
+    @@1388:     cmp     eax, [ebp-$18]
+    @@1391:     jz      @@1652
+    @@1397:     mov     eax, offset @@1824
+    @@1402:     call    NtProc
+    @@1407:     mov     [ebp-$2C], eax
+    @@1410:     cmp     dword ptr [ebp-$2C], +$00
+    @@1414:     jz      @@1683
+    @@1420:     test    edi, edi
+    @@1422:     jz      @@1432
+    @@1424:     mov     eax, [edi+$04]
+    @@1427:     mov     [ebp-$30], eax
+    @@1430:     jmp     @@1437
+    @@1432:     xor     eax, eax
+    @@1434:     mov     [ebp-$30], eax
+    @@1437:     xor     eax, eax
+    @@1439:     mov     [ebp-$34], eax
+    @@1442:     xor     eax, eax
+    @@1444:     mov     [ebp-$38], eax
+    @@1447:     cmp     dword ptr [ebp+$10], +$00
+    @@1451:     jz      @@1473
+    @@1453:     test    byte ptr [ebp+$1E], $01
+    @@1457:     jz      @@1467
+    @@1459:     lea     eax, [ebp+$10]
+    @@1462:     mov     [ebp-$34], eax
+    @@1465:     jmp     @@1473
+    @@1467:     lea     eax, [ebp+$10]
+    @@1470:     mov     [ebp-$38], eax
+    @@1473:     push    ebx
+    @@1474:     push    $25
+    @@1476:     call    AllocMemEx
+    @@1481:     mov     edi, eax
+    @@1483:     test    edi, edi
+    @@1485:     jz      @@1683
+    @@1491:     push    esi
+    @@1492:     push    edi
+    @@1493:     mov     esi, offset CExitThreadFrame
+    @@1498:     lea     edi, [ebp+$FFFFFF23]
+    @@1504:     mov     ecx, $00000009
+    @@1509:     rep
+    @@1510:     movsd
+    @@1511:     movsb
+    @@1512:     pop     edi
+    @@1513:     pop     esi
+    @@1514:     mov     eax, [ebp+$14]
+    @@1517:     mov     [ebp+$FFFFFF28], eax
+    @@1523:     mov     [ebp+$FFFFFF38], edi
+    @@1529:     xor     edx, edx
+    @@1531:     mov     eax, offset @@1852
+    @@1536:     call    KernelProc
+    @@1541:     mov     [ebp+$FFFFFF3D], eax
+    @@1547:     xor     edx, edx
+    @@1549:     mov     eax, offset @@1872
+    @@1554:     call    KernelProc
+    @@1559:     mov     [ebp+$FFFFFF42], eax
+    @@1565:     lea     eax, [ebp-$1C]
+    @@1568:     push    eax
+    @@1569:     push    $25
+    @@1571:     lea     eax, [ebp+$FFFFFF23]
+    @@1577:     push    eax
+    @@1578:     push    edi
+    @@1579:     push    ebx
+    @@1580:     call    dword ptr WriteProcessMemory
+    @@1586:     test    eax, eax
+    @@1588:     jz      @@1643
+    @@1590:     lea     eax, [ebp-$28]
+    @@1593:     push    eax
+    @@1594:     lea     eax, [ebp-$18]
+    @@1597:     push    eax
+    @@1598:     mov     eax, [ebp+$18]
+    @@1601:     push    eax
+    @@1602:     push    edi
+    @@1603:     mov     eax, [ebp-$38]
+    @@1606:     push    eax
+    @@1607:     mov     eax, [ebp-$34]
+    @@1610:     push    eax
+    @@1611:     push    $00
+    @@1613:     push    $00
+    @@1615:     mov     eax, [ebp-$30]
+    @@1618:     push    eax
+    @@1619:     push    ebx
+    @@1620:     call    dword ptr [ebp-$2C]
+    @@1623:     test    eax, eax
+    @@1625:     jl      @@1643
+    @@1627:     mov     eax, [ebp-$18]
+    @@1630:     mov     [ebp-$04], eax
+    @@1633:     mov     eax, [ebp+$20]
+    @@1636:     mov     edx, [ebp-$24]
+    @@1639:     mov     [eax], edx
+    @@1641:     jmp     @@1683
+    @@1643:     push    ebx
+    @@1644:     push    edi
+    @@1645:     call    FreeMemEx
+    @@1650:     jmp     @@1683
+    @@1652:     mov     eax, [ebp+$20]
+    @@1655:     push    eax
+    @@1656:     mov     eax, [ebp+$1C]
+    @@1659:     push    eax
+    @@1660:     mov     eax, [ebp+$18]
+    @@1663:     push    eax
+    @@1664:     mov     eax, [ebp+$14]
+    @@1667:     push    eax
+    @@1668:     mov     eax, [ebp+$10]
+    @@1671:     push    eax
+    @@1672:     push    edi
+    @@1673:     push    ebx
+    @@1674:     call    dword ptr CreateRemoteThread
+    @@1680:     mov     [ebp-$04], eax
+    @@1683:     mov     eax, esi
+    @@1685:     call    System.@FreeMem
+  @@1690:     {finally}
+    @@1703:     lea     eax, [ebp+$FFFFFEA0]
+    @@1709:     mov     edx, TFunctionInfo
+    @@1715:     mov     ecx, $00000002
+    @@1720:     call    System.@FinalizeArray
+    @@1725:     lea     eax, [ebp+$FFFFFF78]
+    @@1731:     mov     edx, TFunctionInfo
+    @@1737:     call    System.@FinalizeRecord
+  @@1742:     {end; finally}
+  @@1750:     mov     eax, [ebp-$04]
+  @@1753:     pop     edi
+  @@1754:     pop     esi
+  @@1755:     pop     ebx
+  @@1756:     {stack frame end}
+
+  @@1762:     
+  {
+           0: 00 00 FF FF FF FF 0C 00 00 00 16 27 30 34 21 30      ..ÿÿÿÿ.....'04!0
+          10: 01 3D 27 30 34 31 00 00 00 00 FF FF FF FF 12 00      .='041....ÿÿÿÿ..
+          20: 00 00 11 30 37 20 32 14 36 21 3C 23 30 05 27 3A      ...07 2.6!<#0.':
+          30: 36 30 26 26 00 00 FF FF FF FF 13 00 00 00 07 21      60&&..ÿÿÿÿ.....!
+          40: 39 16 27 30 34 21 30 00 26 30 27 01 3D 27 30 34      9.'04!0.&0'.='04
+          50: 31 00 FF FF FF FF 0A 00 00 00 10 2D 3C 21 01 3D      1.ÿÿÿÿ.....-<!.=
+          60: 27 30 34 31 00 00 FF FF FF FF 0B 00 00 00 03 3C      '041..ÿÿÿÿ.....<
+          70: 27 21 20 34 39 13 27 30 30 00                        '! 49.'00.
+  }
+end;
+
+function RemoteExecute(processHandle: DWORD; func: TRemoteExecuteFunction; var funcResult: DWORD; params: Pointer = nil; size: DWORD = 
+{
+         0: 00 00 00 00                                          ....
+}): BOOL;
+var
+  buf: Pointer;
+  proc: Pointer;
+  par: Pointer;
+  c1: DWORD;
+  p1: Pointer;
+asm
+  @@0:        {stack frame start, has local variables}
+  @@6:        push    ebx
+  @@7:        push    esi
+  @@8:        xor     eax, eax
+  @@10:       mov     [ebp-$04], eax
+  @@13:       lea     eax, [ebp-$08]
+  @@16:       push    eax
+  @@17:       push    $00
+  @@19:       xor     ecx, ecx
+  @@21:       mov     edx, [ebp+$08]
+  @@24:       mov     eax, [ebp+$0C]
+  @@27:       call    CopyFunction
+  @@32:       mov     ebx, eax
+  @@34:       test    ebx, ebx
+  @@36:       jz      @@381
+  @@42:       {try}
+    @@56:       mov     eax, [ebp+$08]
+    @@59:       push    eax
+    @@60:       mov     eax, [ebp+$18]
+    @@63:       push    eax
+    @@64:       call    AllocMemEx
+    @@69:       mov     [ebp-$0C], eax
+    @@72:       {try}
+      @@86:       cmp     dword ptr [ebp+$18], +$00
+      @@90:       jz      @@126
+      @@92:       lea     eax, [ebp-$10]
+      @@95:       push    eax
+      @@96:       mov     eax, [ebp+$18]
+      @@99:       push    eax
+      @@100:      mov     eax, [ebp+$14]
+      @@103:      push    eax
+      @@104:      mov     eax, [ebp-$0C]
+      @@107:      push    eax
+      @@108:      mov     eax, [ebp+$08]
+      @@111:      push    eax
+      @@112:      call    dword ptr WriteProcessMemory
+      @@118:      test    eax, eax
+      @@120:      jz      @@313
+      @@126:      cmp     dword ptr [ebp-$0C], +$00
+      @@130:      jz      @@137
+      @@132:      mov     esi, [ebp-$0C]
+      @@135:      jmp     @@140
+      @@137:      mov     esi, [ebp+$14]
+      @@140:      lea     eax, [ebp-$10]
+      @@143:      push    eax
+      @@144:      push    $00
+      @@146:      push    esi
+      @@147:      push    ebx
+      @@148:      push    $00
+      @@150:      push    $00
+      @@152:      mov     eax, [ebp+$08]
+      @@155:      push    eax
+      @@156:      call    CreateRemoteThreadEx
+      @@161:      mov     [ebp-$10], eax
+      @@164:      cmp     dword ptr [ebp-$10], +$00
+      @@168:      jz      @@313
+      @@174:      {try}
+        @@188:      push    $FF
+        @@190:      mov     eax, [ebp-$10]
+        @@193:      push    eax
+        @@194:      call    WaitForSingleObject
+        @@199:      mov     eax, [ebp+$10]
+        @@202:      push    eax
+        @@203:      mov     eax, [ebp-$10]
+        @@206:      push    eax
+        @@207:      call    GetExitCodeThread
+      @@212:      {finally}
+        @@225:      mov     eax, [ebp-$10]
+        @@228:      push    eax
+        @@229:      call    CloseHandle
+      @@234:      {end; finally}
+      @@242:      call    InitRemoteProcs
+      @@247:      cmp     dword ptr [ebp+$18], +$00
+      @@251:      jz      @@304
+      @@253:      mov     eax, [ebp+$18]
+      @@256:      push    eax
+      @@257:      mov     eax, [ebp+$14]
+      @@260:      push    eax
+      @@261:      call    IsBadWritePtr
+      @@266:      test    eax, eax
+      @@268:      jnz     @@304
+      @@270:      lea     eax, [ebp-$10]
+      @@273:      push    eax
+      @@274:      mov     eax, [ebp+$18]
+      @@277:      push    eax
+      @@278:      mov     eax, [ebp+$14]
+      @@281:      push    eax
+      @@282:      mov     eax, [ebp-$0C]
+      @@285:      push    eax
+      @@286:      mov     eax, [ebp+$08]
+      @@289:      push    eax
+      @@290:      call    dword ptr ReadProcessMemory
+      @@296:      test    eax, eax
+      @@298:      jnz     @@304
+      @@300:      xor     eax, eax
+      @@302:      jmp     @@306
+      @@304:      mov     al, $01
+      @@306:      neg     al
+      @@308:      sbb     eax, eax
+      @@310:      mov     [ebp-$04], eax
+    @@313:      {finally}
+      @@326:      mov     eax, [ebp+$08]
+      @@329:      push    eax
+      @@330:      mov     eax, [ebp-$0C]
+      @@333:      push    eax
+      @@334:      call    FreeMemEx
+    @@339:      {end; finally}
+  @@347:      {finally}
+    @@360:      mov     eax, [ebp+$08]
+    @@363:      push    eax
+    @@364:      mov     eax, [ebp-$08]
+    @@367:      push    eax
+    @@368:      call    FreeMemEx
+  @@373:      {end; finally}
+  @@381:      mov     eax, [ebp-$04]
+  @@384:      pop     esi
+  @@385:      pop     ebx
+  @@386:      {stack frame end}
+end;
+
+type
+  TNtProcessInfoClass = (ProcessBasicInformation, ProcessQuotaLimits, ProcessIoCounters, ProcessVmCounters, ProcessTimes, ProcessBasePriority, ProcessRaisePriority, ProcessDebugPort, ProcessExceptionPort, ProcessAccessToken, ProcessLdtInformation, ProcessLdtSize, ProcessDefaultHardErrorMode, ProcessIoPortHandlers, ProcessPooledUsageAndLimits, ProcessWorkingSetWatch, ProcessUserModeIOPL, ProcessEnableAlignmentFaultFixup, ProcessPriorityClass, MaxProcessInfoClass);
+
+const
+  NtQueryInformationProcess: function(processHandle: DWORD; infoClass: TNtProcessInfoClass; buffer: Pointer; bufSize: DWORD; returnSize: TPCardinal): DWORD; stdcall = NtQueryInformationProcess;
+
+function ProcessHandleToId(processHandle: DWORD): DWORD;
+type
+  T9xHandleTable = packed record
+    itemCount: Integer;
+    items: packed array [0..268435454] of packed record
+      access: DWORD;
+      objAddr: TPByte;
+    end;
+  end;
+
+  TNtProcessBasicInfo = packed record
+    exitStatus: DWORD;
+    pebBaseAddress: DWORD;
+    affinityMask: DWORD;
+    basePriority: DWORD;
+    pid: DWORD;
+    parentPid: DWORD;
+  end;
+
+var
+  ht: ^T9xHandleTable;
+  c1: DWORD;
+  pbi: TNtProcessBasicInfo;
+  ph: DWORD;
+asm
+  @@0:        {stack frame start, has local variables}
+  @@6:        push    ebx
+  @@7:        push    esi
+  @@8:        push    edi
+  @@9:        xor     eax, eax
+  @@11:       mov     [ebp-$04], eax
+  @@14:       call    GetCurrentProcess
+  @@19:       cmp     eax, [ebp+$08]
+  @@22:       jnz     @@37
+  @@24:       call    GetCurrentProcessId
+  @@29:       mov     [ebp-$04], eax
+  @@32:       jmp     @@417
+  @@37:       call    GetVersion
+  @@42:       test    eax, $80000000
+  @@47:       jz      @@261
+  @@53:       {try}
+    @@67:       call    GetCurrentProcessId
+    @@72:       mov     ebx, eax
+    @@74:       call    Magic
+    @@79:       xor     ebx, eax
+    @@81:       mov     ebx, [ebx+$44]
+  @@84:       {except(short)}
+    @@99:       xor     ebx, ebx
+  @@101:      {end; except}
+  @@106:      test    ebx, ebx
+  @@108:      jz      @@417
+  @@114:      call    Magic95
+  @@119:      test    al, al
+  @@121:      jz      @@128
+  @@123:      mov     esi, [ebp+$08]
+  @@126:      jmp     @@134
+  @@128:      mov     esi, [ebp+$08]
+  @@131:      shr     esi, $02
+  @@134:      mov     eax, esi
+  @@136:      xor     edx, edx
+  @@138:      push    edx
+  @@139:      push    eax
+  @@140:      mov     eax, [ebx]
+  @@142:      cdq
+  @@143:      cmp     edx, esp+$04
+  @@147:      jnz     @@158
+  @@149:      cmp     eax, esp
+  @@152:      pop     edx
+  @@153:      pop     eax
+  @@154:      jbe     @@249
+  @@156:      jmp     @@162
+  @@158:      pop     edx
+  @@159:      pop     eax
+  @@160:      jle     @@249
+  @@162:      {try}
+    @@176:      mov     edi, [ebx+esi*8+$08]
+    @@180:      test    edi, edi
+    @@182:      jz      @@216
+    @@184:      call    GetCurrentProcessId
+    @@189:      push    eax
+    @@190:      call    Magic
+    @@195:      pop     edx
+    @@196:      xor     edx, eax
+    @@198:      mov     al, byte ptr [edx]
+    @@200:      cmp     al, byte ptr [edi]
+    @@202:      jnz     @@216
+    @@204:      call    Magic
+    @@209:      xor     eax, [ebx+esi*8+$08]
+    @@213:      mov     [ebp-$04], eax
+    @@216:      xor     eax, eax
+    @@218:      pop     edx
+    @@219:      pop     ecx
+    @@220:      pop     ecx
+    @@221:      mov     fs:[eax], edx
+    @@224:      jmp     @@417
+    @@229:      jmp     System.@HandleAnyException
+    @@234:      xor     eax, eax
+    @@236:      mov     [ebp-$04], eax
+  @@239:      {end; except}
+  @@244:      jmp     @@417
+  @@249:      push    $57
+  @@251:      call    SetLastError
+  @@256:      jmp     @@417
+  @@261:      push    $00
+  @@263:      push    $00
+  @@265:      push    $00000400
+  @@270:      lea     eax, [ebp-$08]
+  @@273:      push    eax
+  @@274:      call    GetCurrentProcess
+  @@279:      push    eax
+  @@280:      mov     eax, [ebp+$08]
+  @@283:      push    eax
+  @@284:      call    GetCurrentProcess
+  @@289:      push    eax
+  @@290:      call    DuplicateHandle
+  @@295:      test    eax, eax
+  @@297:      jnz     @@305
+  @@299:      mov     eax, [ebp+$08]
+  @@302:      mov     [ebp-$08], eax
+  @@305:      lea     eax, [ebp-$20]
+  @@308:      mov     edx, $00000018
+  @@313:      call    ZeroMemory
+  @@318:      cmp     dword ptr NtQueryInformationProcess, +$00
+  @@325:      jnz     @@342
+  @@327:      mov     eax, offset @@440
+  @@332:      call    NtProc
+  @@337:      mov     dword ptr NtQueryInformationProcess, eax
+  @@342:      cmp     dword ptr NtQueryInformationProcess, +$00
+  @@349:      jz      @@393
+  @@351:      push    $00
+  @@353:      push    $18
+  @@355:      lea     eax, [ebp-$20]
+  @@358:      push    eax
+  @@359:      push    $00
+  @@361:      mov     eax, [ebp-$08]
+  @@364:      push    eax
+  @@365:      call    dword ptr NtQueryInformationProcess
+  @@371:      mov     esi, eax
+  @@373:      test    esi, esi
+  @@375:      jnz     @@385
+  @@377:      mov     eax, [ebp-$10]
+  @@380:      mov     [ebp-$04], eax
+  @@383:      jmp     @@400
+  @@385:      push    esi
+  @@386:      call    SetLastError
+  @@391:      jmp     @@400
+  @@393:      push    $78
+  @@395:      call    SetLastError
+  @@400:      mov     eax, [ebp-$08]
+  @@403:      cmp     eax, [ebp+$08]
+  @@406:      jz      @@417
+  @@408:      mov     eax, [ebp-$08]
+  @@411:      push    eax
+  @@412:      call    CloseHandle
+  @@417:      mov     eax, [ebp-$04]
+  @@420:      pop     edi
+  @@421:      pop     esi
+  @@422:      pop     ebx
+  @@423:      {stack frame end}
+
+  @@429:      
+  {
+           0: 00 00 00 FF FF FF FF 19 00 00 00 1B 21 04 20 30      ...ÿÿÿÿ.....!. 0
+          10: 27 2C 1C 3B 33 3A 27 38 34 21 3C 3A 3B 05 27 3A      ',.;3:'84!<:;.':
+          20: 36 30 26 26 00 00 00                                 60&&...
+  }
+end;
+
+finalization
+asm
+  @@0:        {empty finalization}
+end;
+
+initialization
+asm
+  @@0:        {empty initialization}
+end;
+
+end.

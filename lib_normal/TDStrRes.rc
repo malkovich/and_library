@@ -1,0 +1,82 @@
+;********************************************************************
+;* Tomes of Delphi: Algorithms and Data Structures                  *
+;* Source code copyright (c) Julian M Bucknall, 1999-2001           *
+;* All rights reserved                                              *
+;*------------------------------------------------------------------*
+;* TDStrRes.rc                                                      *
+;* String table resource strings                                    *
+;********************************************************************
+
+#include "TDStrRes.inc"
+
+STRINGTABLE
+BEGIN
+
+tdePointerLongSize,   "Pointers should be same size as longints ([%s] %s.%s Objname: %s)"
+tdeIndexOutOfBounds,  "Index is out of bounds ([%s] %s.%s Objname: %s index: %d)"
+tdeNilItem,           "Cannot have an item that is nil ([%s] %s.%s Objname: %s)"
+tdeAtMaxCapacity,     "Cannot add another item to array; at maximum capacity ([%s] %s.%s Objname: %s)"
+tdeCapacityTooLarge,  "Attempted to set capacity of array too high ([%s] %s.%s Objname: %s)"
+tdeInvalidClassType,  "Attempted to add an object of an unknown class ([%s] %s.%s Objname: %s index: %d)"
+tdeListCannotDelete,  "Attempted to delete before first or after last node ([%s] %s.%s Objname: %s)"
+tdeListCannotExamine, "Attempted to examine before first or after last node ([%s] %s.%s Objname: %s)"
+tdeListInvalidIndex,  "Linked list index is out of bounds ([%s] %s.%s Objname: %s)"
+tdeListIsNotSorted,   "List is not sorted, hence cannot insert an item in order ([%s] %s.%s Objname: %s)"
+tdeStackIsEmpty,      "Stack is empty: cannot examine or pop top item ([%s] %s.%s Objname: %s)"
+tdeQueueIsEmpty,      "Queue is empty: cannot examine or dequeue top item ([%s] %s.%s Objname: %s)"
+tdeInvalidNode,       "Node being freed does not belong to node manager ([%s] %s.%s Objname: %s)"
+tdeTListIsNil,        "The TList instance is nil [%s]"
+tdeTListInvalidRange, "The range %d - %d is invalid for the TList instance [%s]"
+tdeHashTblNoHashFunc, "Hash function cannot be nil ([%s] %s.%s Objname: %s)"
+tdeHashTblKeyNotFound,"Key not found when deleting item from hash table ([%s] %s.%s Objname: %s)"
+tdeHashTblKeyExists,  "Key found when inserting item into hash table ([%s] %s.%s Objname: %s)"
+tdeHashTblIsFull,     "Hash table is full, cannot insert new item ([%s] %s.%s Objname: %s)"
+tdeHashTblNoCompare,  "Hash table has no record to key compare function ([%s] %s.%s Objname: %s)"
+tdeHashTblNoDir,      "The directory stream cannot be nil ([%s] %s.%s Objname: %s)"
+tdeHashTblNoBuckets,  "The bucket stream cannot be nil ([%s] %s.%s Objname: %s)"
+tdeHashTblNoRecords,  "The record stream cannot be nil ([%s] %s.%s Objname: %s)"
+tdeHashTblDeletedBkt, "The bucket just read was deleted, expected it to be active ([%s] %s.%s Objname: %s)"
+tdeHashTblDeletedRec, "The record just read was deleted, expected it to be active ([%s] %s.%s Objname: %s)"
+tdeRSOutOfBounds,     "Record number is out of bounds ([%s] %s.%s Objname: %s Number: %d)"
+tdeRSAlreadyDeleted,  "Record has already been deleted ([%s] %s.%s Objname: %s Number: %d)"
+tdeRSNoHeaderRec,     "Stream/file has no header record ([%s] %s.%s Objname: %s)"
+tdeRSBadHeaderRec,    "Stream/file has invalid header record ([%s] %s.%s Objname: %s)"
+tdeRSReadError,       "Stream read error: not enough bytes read ([%s] %s.%s Objname: %s Bytes needed: %d)"
+tdeRSSeekError,       "Stream seek error: could not seek to offset ([%s] %s.%s Objname: %s Offset: %d)"
+tdeRSWriteError,      "Stream write error: not enough bytes written ([%s] %s.%s Objname: %s Bytes needed: %d)"
+tdeRSRecIsDeleted,    "Record is deleted and cannot be written to ([%s] %s.%s Objname: %s Number: %d)"
+tdeRSFlushError,      "Error occurred during file fluch operation ([%s] %s.%s Objname: %s Error: %d)"
+tdeRandRangeError,    "Invalid range supplied ([%s] %s.%s Objname: %s)"
+tdeSkpLstDupItem,     "Skip lists cannot have duplicate items: item being added already exists ([%s] %s.%s Objname: %s)"
+tdeSkpLstItemMissing, "Item not found in skip list: cannot remove it ([%s] %s.%s Objname: %s)"
+tdeSkpLstNoCompare,   "A skip list needs a compare function ([%s] %s.%s Objname: [none])"
+tdeBinTree2Children,  "Binary tree: Cannot delete a node with two children ([%s] %s.%s Objname: %s)"
+tdeBinTreeHasChild,   "Binary tree: Cannot insert here, this child node already exists ([%s] %s.%s Objname: %s)"
+tdeBinTreeItemMissing,"Binary tree: Cannot find item to delete ([%s] %s.%s Objname: %s)"
+tdeBinTreeDupItem,    "Binary tree: Cannot have duplicate item, item being added already exists ([%s] %s.%s Objname: %s)"
+tdePriQueueNoCompare, "A priority queue needs a compare function ([%s] %s.%s Objname: [none])"
+tdeLZNoAction,        "Cannot enumerate any matches without an action routine ([%s] %s.%s Objname: %s)"
+tdeLZEncodeBadMethod, "Cannot call this method during compression ([%s] %s.%s Objname: %s)"
+tdeLZDecodeBadMethod, "Cannot call this method during decompression ([%s] %s.%s Objname: %s)"
+tdeLZSWBadWrite,      "Decompressing a stream: attempted to write %d bytes to stream, but only %d bytes got written ([%s] %s.%s Objname: %s)"
+tdeLZBadEncodedStream,"Decompressing an LZ77 stream: no or invalid compression header was found [%s.%s])"
+tdeLZProblemReading,  "Decompressing a stream: not enough data present (stream corrupted?) [%s.%s])"
+tdeLZProblemWriting,  "Compressing a stream: couldn't write to the encrypted stream (disk full?) [%s.%s])"
+tdeOutStreamWrite,    "Attempt to write to a stream opened for input ([%s] %s.%s Objname: %s)"
+tdeInStreamRead,      "Cannot read more than 64K in 16-bit ([%s] %s.%s Objname: %s)"
+tdeOutStreamRead,     "Attempt to read from a stream opened for output ([%s] %s.%s Objname: %s)"
+tdeInStreamWrite,     "Cannot write more than 64K in 16-bit ([%s] %s.%s Objname: %s)"
+tdeStreamBadOrigin,   "Invalid origin passed to Seek method ([%s] %s.%s Objname: %s)"
+tdeOutStreamSeek,     "The buffered output stream cannot seek ([%s] %s.%s Objname: %s)"
+tdeInBitStreamRead,   "The input bit stream is exhausted: the end of the stream has been reached ([%s] %s.%s Objname: %s)"
+tdeOutBitStreamWrite, "The output bit stream had an error when writing to the underlying stream (disk full?) ([%s] %s.%s Objname: %s)"
+tdeHuffBadEncodedStrm,"Decompressing a Huffman stream: no or an invalid compression header was found [%s.%s])"
+tdeSplyBadEncodedStrm,"Decompressing a splay stream: no or an invalid compression header was found [%s.%s])"
+tdeStateMisMatchQuote,"String has opening quote but no closing quote [%s.%s]"
+tdeStateBadCSV,       "String is a badly formed CSV string: mismatched quotes, no comma after closing quote [%s.%s])"
+tdeDequeIsEmpty,      "Deque is empty: cannot examine or dequeue top item ([%s] %s.%s Objname: %s)"
+tdeRegexParseError,   "Error at %d when parsing regular expression ([%s] %s.%s Objname: %s)"
+tdeNoStream,          "Stream cannot be nil, it must be assigned ([%s] %s.%s Objname: %s)"
+
+
+END

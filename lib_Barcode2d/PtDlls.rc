@@ -1,0 +1,8 @@
+PtImageRW       PE_FILE         .\PtImageRW.dll
+PtDMDecode      PE_FILE         .\PtDMDecode.dll
+PtDMEncode      PE_FILE         .\PtDMEncode.dll
+PtPDF417Decode  PE_FILE         .\PtPDF417Decode.dll
+PtPDF417Encode  PE_FILE         .\PtPDF417Encode.dll
+PtQRDecode      PE_FILE         .\PtQRDecode.dll
+PtQREncode      PE_FILE         .\PtQREncode.dll
+

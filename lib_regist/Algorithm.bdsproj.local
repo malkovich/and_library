@@ -1,0 +1,8 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<BorlandProject>
+	<Transactions>
+    <Transaction>2008-08-29 17:28:34.278.bdsproj,C:\Documents and Settings\siestii\My Documents\Borland Studio Projects\Project1.bdsproj=C:\Documents and Settings\siestii\桌面\ZhuXian\VerifyCode\Algorithm.bdsproj</Transaction>
+    <Transaction>2008-09-05 16:22:25.139.pas,C:\Documents and Settings\siestii\桌面\ZhuXian\VerifyCode\Unit1.pas=C:\Documents and Settings\siestii\桌面\ZhuXian\lib\lib_ics\PasswordMD5Time.pas</Transaction>
+    <Transaction>2008-09-05 16:31:20.559.pas,C:\Documents and Settings\siestii\桌面\ZhuXian\lib\lib_ics\PasswordMD5Time.pas=</Transaction>
+  </Transactions>
+</BorlandProject>

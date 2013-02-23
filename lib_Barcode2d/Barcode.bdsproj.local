@@ -1,0 +1,9 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<BorlandProject>
+	<Transactions>
+    <Transaction>2009-03-23 02:53:22.671.bdsproj,C:\Documents and Settings\Administrator\My Documents\Borland Studio Projects\Project1.bdsproj=C:\Documents and Settings\Administrator\桌面\ZhuXian\lib\lib_Barcode2d\Barcode.bdsproj</Transaction>
+    <Transaction>2009-03-24 02:37:55.156.pas,C:\Documents and Settings\Administrator\桌面\ZhuXian\lib\lib_Barcode2d\Unit1.pas=C:\Documents and Settings\Administrator\桌面\ZhuXian\lib\lib_Barcode2d\PtBarcodeEnc.pas</Transaction>
+    <Transaction>2009-03-24 03:11:43.781.pas,C:\Documents and Settings\Administrator\桌面\ZhuXian\lib\lib_Barcode2d\Unit1.pas=C:\Documents and Settings\Administrator\桌面\ZhuXian\lib\lib_Barcode2d\PtBarcodeImage.pas</Transaction>
+    <Transaction>2009-03-27 15:35:25.471.pas,C:\Documents and Settings\siestii\桌面\ZhuXian\lib\lib_Barcode2d\Unit1.pas=C:\Documents and Settings\siestii\桌面\ZhuXian\lib\lib_Barcode2d\barcodeUnit.pas</Transaction>
+  </Transactions>
+</BorlandProject>

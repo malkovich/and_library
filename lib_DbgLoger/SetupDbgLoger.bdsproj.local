@@ -1,0 +1,10 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<BorlandProject>
+	<Transactions>
+    <Transaction>2008-11-22 00:37:27.359.pas,C:\Documents and Settings\Administrator\My Documents\Borland Studio Projects\Unit7.pas=C:\Documents and Settings\Administrator\桌面\ZhuXian\lib\lib_DbgLoger\SetupForm.pas</Transaction>
+    <Transaction>2008-11-22 00:37:27.359.dfm,C:\Documents and Settings\Administrator\My Documents\Borland Studio Projects\Unit7.dfm=C:\Documents and Settings\Administrator\桌面\ZhuXian\lib\lib_DbgLoger\SetupForm.dfm</Transaction>
+    <Transaction>2008-11-22 00:37:53.171.bdsproj,C:\Documents and Settings\Administrator\My Documents\Borland Studio Projects\Project1.bdsproj=C:\Documents and Settings\Administrator\桌面\ZhuXian\lib\lib_DbgLoger\SetupDbgLoger.bdsproj</Transaction>
+    <Transaction>2008-11-22 01:44:01.218.pas,C:\Documents and Settings\Administrator\桌面\ZhuXian\lib\lib_DbgLoger\Unit2.pas=C:\Documents and Settings\Administrator\桌面\ZhuXian\lib\lib_DbgLoger\RGBUnit.pas</Transaction>
+    <Transaction>2008-11-22 02:10:44.046.pas,C:\Documents and Settings\Administrator\桌面\ZhuXian\lib\lib_DbgLoger\RGBUnit.pas=</Transaction>
+  </Transactions>
+</BorlandProject>

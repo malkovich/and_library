@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<BorlandProject>
+	<Transactions>
+    <Transaction>2008-09-29 08:57:39.156.bdsproj,C:\Documents and Settings\Administrator\My Documents\Borland Studio Projects\Project1.bdsproj=C:\Documents and Settings\Administrator\桌面\ZhuXian\VerifyCode\MachineManager.bdsproj</Transaction>
+    <Transaction>2008-09-29 09:05:16.546.pas,C:\Documents and Settings\Administrator\桌面\ZhuXian\VerifyCode\Unit2.pas=C:\Documents and Settings\Administrator\桌面\ZhuXian\VerifyCode\VerifyCodeDllInterface.pas</Transaction>
+    <Transaction>2008-10-01 02:27:27.390.pas,C:\Documents and Settings\Administrator\桌面\ZhuXian\TuojiClient\UserDBAccess.pas=</Transaction>
+    <Transaction>2008-10-01 02:28:45.921.pas,C:\Documents and Settings\Administrator\桌面\ZhuXian\VerifyCode\Unit2.pas=C:\Documents and Settings\Administrator\桌面\ZhuXian\VerifyCode\AccountInterface.pas</Transaction>
+    <Transaction>2008-10-07 13:43:24.988.pas,C:\Documents and Settings\Administrator\桌面\ZhuXian\VerifyCode\Unit2.pas=C:\Documents and Settings\Administrator\桌面\ZhuXian\VerifyCode\RegistCodeInterface.pas</Transaction>
+    <Transaction>2008-10-07 13:53:31.613.pas,C:\Documents and Settings\Administrator\桌面\ZhuXian\VerifyCode\RegistCodeInterface.pas=</Transaction>
+  </Transactions>
+</BorlandProject>

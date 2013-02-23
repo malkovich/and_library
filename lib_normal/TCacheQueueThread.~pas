@@ -1,0 +1,159 @@
+unit TCacheQueueThread;
+
+interface
+uses
+  windows, classes, TDStkQue,SysUtils;
+
+type
+  TDataHandleOBJ = procedure (Sender:Pointer; pBuf:Pointer; dwLen:dword) of object;
+  TDataHandlePRO = procedure (Sender:Pointer; pBuf:Pointer; dwLen:dword);
+
+  PPackageRecord = ^TPackageRecord;
+  TPackageRecord = packed record
+    Sender:Pointer; 
+    dwLen :dword;
+    szBuf :array[0..0] of char;
+  end;
+
+  TCacheQueueClass = class(TThread)
+  private
+    KeysQueue :TtdArrayQueue;
+    hEvent: THandle;
+    hHeap: THandle;
+    FIsRunning :boolean;
+    FDataHandleProc :TDataHandleOBJ;
+    FDataHandler    :TDataHandlePRO;
+    ThreadLock: TRTLCriticalSection; //ÁÙ½çÇø
+  protected
+    Procedure PushIn(Sender:Pointer; const Buf; dwLen :dword);
+    procedure DataHandleProc(Sender: Pointer; pBuf:pointer; dwLen :dword);
+    procedure Execute;override;
+    function GetIsEmpty:boolean;
+    function GetQueueCount:dword;
+  public
+    Procedure PushQue(Sender:Pointer; const Buf; dwLen :dword);
+    Procedure PushStrQue(Sender:Pointer; msg:string);
+  public
+    constructor Create();
+    destructor Destroy; override;
+    procedure WaitUtilTerminate;
+
+    property OnDataHandle:TDataHandleOBJ read FDataHandleProc write FDataHandleProc;
+    property OnDataHandlePro:TDataHandlePRO read FDataHandler write FDataHandler;
+    property IsEmpty:boolean read GetIsEmpty;
+    property Count:dword read GetQueueCount;
+  end;
+
+
+implementation
+const
+  HEAP_ZERO_MEMORY = $00000008;
+  HEAP_GENERATE_EXCEPTIONS = $00000004;
+
+  PACKET_RECORD_HEAD_LENGTH = SizeOf(TPackageRecord) - 1;
+
+function TCacheQueueClass.GetQueueCount:dword;
+begin
+  result:=KeysQueue.Count;
+end;
+
+function TCacheQueueClass.GetIsEmpty:boolean;
+begin
+  result:=KeysQueue.IsEmpty;
+end;
+
+Procedure TCacheQueueClass.PushQue(Sender:Pointer; const Buf; dwLen :dword);
+begin
+  PushIn(Sender, Buf, dwLen);
+end;
+
+Procedure TCacheQueueClass.PushStrQue(Sender:Pointer; msg:string);
+begin
+  PushIn(Sender, msg[1], Length(msg));
+end;
+
+Procedure TCacheQueueClass.PushIn(Sender:Pointer; const Buf; dwLen :dword);
+var
+  pPackage :PPackageRecord;
+begin
+  if dwLen = 0 then exit;
+  EnterCriticalSection(ThreadLock);
+  try
+    pPackage:= HeapAlloc(hHeap, HEAP_ZERO_MEMORY, dwLen + SizeOf(DWORD));
+    pPackage.Sender := Sender;
+    pPackage.dwLen := dwLen;
+    CopyMemory(@pPackage.szBuf[0], @Buf, dwLen);
+    KeysQueue.Enqueue(pPackage);
+    SetEvent(hEvent);
+  finally
+    LeaveCriticalSection(ThreadLock);
+  end;
+end;
+
+procedure TCacheQueueClass.DataHandleProc(Sender: Pointer; pBuf:pointer; dwLen :dword);
+begin
+  if Assigned(FDataHandleProc) then
+    FDataHandleProc(Sender, pBuf, dwLen);
+  if Assigned(FDataHandler) then
+    FDataHandler(Sender, pBuf, dwLen);
+end;
+
+procedure TCacheQueueClass.Execute;
+var
+  pPackage :PPackageRecord;
+begin
+  FIsRunning :=true;
+  try
+    while Not Terminated do
+    begin
+      if WAIT_OBJECT_0 = WaitForSingleObject(hEvent, 1000) then
+      begin  
+          while not KeysQueue.IsEmpty do
+          begin
+            EnterCriticalSection(ThreadLock);
+            try
+              pPackage := KeysQueue.Dequeue;
+            finally
+              LeaveCriticalSection(ThreadLock);
+            end;
+            if Not ISBadReadPtr(@pPackage.szBuf[0],pPackage.dwLen) then
+               DataHandleProc(pPackage.Sender, @pPackage.szBuf[0], pPackage.dwLen);
+            HeapFree(hHeap, 0, pPackage);
+          end;     
+      end;
+    end;
+  finally
+    FIsRunning :=False;
+  end;
+end;
+
+constructor TCacheQueueClass.Create();
+begin
+  InitializeCriticalSection(ThreadLock);
+  FDataHandleProc := nil;
+  FDataHandler    := nil;
+  FIsRunning:=false;
+  hHeap := HeapCreate(HEAP_GENERATE_EXCEPTIONS, $10000, 0);
+  hEvent := CreateEvent(Nil, False, True, nil);
+  KeysQueue :=TtdArrayQueue.Create(nil, 100);
+  inherited Create(False);
+end;
+
+destructor TCacheQueueClass.Destroy;
+begin
+  CloseHandle(hEvent);
+  KeysQueue.free;  
+  HeapDestroy(hHeap);
+  DeleteCriticalSection(ThreadLock);
+  inherited Destroy;
+end;
+
+procedure TCacheQueueClass.WaitUtilTerminate;
+begin
+  repeat
+    sleep(88);
+  until not FIsRunning;
+end;
+
+
+end.

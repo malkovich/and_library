@@ -1,0 +1,135 @@
+unit DbgLoger;
+
+interface
+uses windows;
+
+procedure DebugPrinter(Msg: PChar); stdcall;
+procedure DBG( Msg: String ); overload;
+procedure DBG( fmt:string; parma:array of TVarRec); overload;
+
+type
+  TLogMode = (lmDebugView, lmLogFile, lmNone);
+
+var
+  LogMode: TLogMode = lmDebugView;
+  HasHead: LongBool = True;
+  MyOutputDebugString: procedure (lpOutputString: PChar); stdcall = nil;
+
+implementation
+uses SysUtils, forms, Classes, SyncObjs, TCacheQueueThread, madZip;
+
+function GetFileName(hModule:THandle):string;
+var
+  Buffer:array[byte] of char;
+begin
+  ZeroMemory(@buffer[0], 256);
+  GetModuleFileName(hModule, @Buffer, 256);
+  result := buffer;
+end;
+
+function GetLogFileName:String;
+var
+  ExtStr, NameStr: String;
+begin
+  Result := GetFileName(0);
+  ExtStr := ExtractFileExt (Result);
+  NameStr := ExtractFileName (Result);
+  SetLength (NameStr, Length(NameStr) - Length(ExtStr) );
+  Result := ExtractFilePath(Result) + NameStr + '.log';
+end;
+
+var
+  LogFileName: String;
+  CRS: TCriticalSection;
+  FS: TFileStream;
+  PidStr: string;
+
+const
+  MAX_LOG_FILE_SIZE = 16 * 1024 * 1024;
+
+procedure CutHalfLogLine (var FS: TFileStream);
+var
+  Buf: PChar;
+  SeekPosition: Integer;
+  NewSize: Integer;
+begin
+  NewSize := FS.Size div 2;
+
+  FS.Seek ( - NewSize, soFromEnd);
+  Buf := AllocMem (NewSize);
+  FS.Read (Buf[0], NewSize);
+  FS.Size := 0;
+
+  SeekPosition := 0;
+  repeat
+      if Buf[SeekPosition] = Chr($D) then
+        if Buf[SeekPosition + 1] = Chr($A) then Break;
+      Inc (SeekPosition);
+  until SeekPosition = NewSize - 3;
+  SeekPosition := SeekPosition + 2;
+
+  FS.Seek(0, soFromEnd);
+  FS.Write (Buf[SeekPosition], NewSize - SeekPosition);
+  FreeMem (Buf);
+end;
+
+procedure WriteToLogFile (LineStr: String);
+begin
+  if not assigned (FS) then
+  begin
+    LogFileName := GetLogFileName;
+    if not FileExists(LogFileName) then
+      FileClose(FileCreate(LogFileName));
+
+    FS := TFileStream.Create (LogFileName, fmShareDenyWrite or fmOpenReadWrite);
+  end;
+
+  if FS.Size > MAX_LOG_FILE_SIZE then
+    CutHalfLogLine (FS);
+
+  FS.Seek(0, soFromEnd);
+  LineStr := LineStr + #13#10;
+  FS.Write (LineStr[1], Length(LineStr));
+end;
+
+procedure DebugPrinter (Msg: PChar); stdcall;
+var
+  FmtStr: String;
+begin
+  if PidStr = '' then
+  begin
+    CRS := TCriticalSection.Create;
+    PidStr := Format (' [%s|%d] ', [ExtractFileName(Application.ExeName), GetCurrentProcessID]);
+    PidStr := #9 + PidStr + #9;
+  end;
+
+  FmtStr := StrPas(Msg);
+  if HasHead then
+    FmtStr := FormatDateTime('yyyy-mm-dd hh:mm:ss', NOW) +  PidStr + FmtStr;   
+
+  CRS.Enter;
+  case LogMode of
+    lmDebugView:
+        begin
+          if assigned (MyOutputDebugString) then
+            MyOutputDebugString (PChar(FmtStr))
+          else
+            OutputDebugString (PChar(FmtStr));
+        end;
+    lmLogFile:  WriteToLogFile(FmtStr);
+    lmNone:;
+  end;
+  CRS.Leave;
+end;
+
+procedure DBG(Msg: String);
+begin
+  DebugPrinter(PChar(Msg));
+end;
+
+procedure DBG( fmt:string; parma:array of TVarRec);
+begin
+  DBG(Format(fmt, parma));
+end;
+
+end.

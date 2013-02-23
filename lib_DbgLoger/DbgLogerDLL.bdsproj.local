@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<BorlandProject>
+	<Transactions>
+    <Transaction>2008-11-03 13:29:06.778.bdsproj,C:\Documents and Settings\Administrator\My Documents\Borland Studio Projects\Project1.bdsproj=C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\DbgLogerDLL.bdsproj</Transaction>
+    <Transaction>2008-11-03 13:29:21.281.bdsproj,C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\DbgLogerDLL.bdsproj=C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\DbgLoger.bdsproj</Transaction>
+    <Transaction>2008-11-03 13:29:21.312.bdsproj,C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\DbgLoger.bdsproj=C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\DbgLogerDLL.bdsproj</Transaction>
+    <Transaction>2008-11-03 13:34:36.417.bdsproj,C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\DbgLogerDLL.bdsproj=C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\DbgLogerCli.bdsproj</Transaction>
+    <Transaction>2008-11-03 13:38:45.573.bdsproj,C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\DbgLogerCli.bdsproj=C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\DbgLoger.bdsproj</Transaction>
+    <Transaction>2008-11-03 13:50:19.280.bdsproj,C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\DbgLoger.bdsproj=C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\DbgLogerDLL.bdsproj</Transaction>
+    <Transaction>2008-11-13 21:41:40.500.pas,C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\Unit2.pas=C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\LogerDllUnit.pas</Transaction>
+    <Transaction>2008-11-13 23:32:40.000.pas,C:\Documents and Settings\Administrator\桌面\ZhuXian\DbgLoger\Unit2.pas=C:\Documents and Settings\Administrator\桌面\ZhuXian\lib\lib_normal\SyncQueueHandler.pas</Transaction>
+    <Transaction>2008-11-14 16:38:47.254.pas,C:\Documents and Settings\siestii\桌面\ZhuXian\DbgLoger\Unit2.pas=C:\Documents and Settings\siestii\桌面\ZhuXian\DbgLoger\LogDatabaseUnit.pas</Transaction>
+  </Transactions>
+</BorlandProject>

@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<BorlandProject>
+  <PersonalityInfo>
+    <Option>
+      <Option Name="Personality">Default.Personality</Option>
+      <Option Name="ProjectType"></Option>
+      <Option Name="Version">1.0</Option>
+      <Option Name="GUID">{DC8EC2B9-7A74-4A86-9247-04906A0D7F3E}</Option>
+    </Option>
+  </PersonalityInfo>
+  <Default.Personality>
+    
+    <Projects>
+      <Projects Name="directx9hook.dll">directx9hook.bdsproj</Projects>
+      <Projects Name="directx8hook.dll">directx8hook.bdsproj</Projects>
+      <Projects Name="Targets">directx9hook.dll directx8hook.dll</Projects>
+    </Projects>
+    <Dependencies/>
+  </Default.Personality>
+</BorlandProject>

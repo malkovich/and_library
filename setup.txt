@@ -1,0 +1,5 @@
+Path=D:\
+Overwrite=1 
+Silent=1
+Shortcut=D,D:\lib\备份到U盘.bat,,"将Lib库的源代码备份到U盘中","备份 AndLibrary"
+Shortcut=D,D:\lib\提取U盘.bat,,"将U盘中的备份更新到Lib库的源代码","提取AndLibrary"

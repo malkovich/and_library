@@ -1,0 +1,1 @@
+dll2pas HardInfosAndComputerID.dll

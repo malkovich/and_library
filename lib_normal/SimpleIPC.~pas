@@ -1,0 +1,118 @@
+unit SimpleIPC;
+
+interface
+uses windows;
+
+Type
+  THearCallBack = Procedure (FromWho: PChar; Buffer: PChar; Size: Integer); Stdcall;
+
+function StartHear (WhoAmI: PChar; HearRecv: THearCallBack): LongBool; Stdcall;
+function StopHear (WhoAmI: PChar): LongBool; Stdcall;
+function Say (ToWho: PChar; Buffer: PChar; Size: Integer): LongBool; Stdcall;
+
+implementation
+
+uses
+  madCHook, classes, SyncObjs, SysUtils;
+
+
+Type
+  LPTRegistIPC = ^TRegistIPC;
+  TRegistIPC = record
+    IpcName: string;
+    Callback: THearCallBack;
+  end;
+
+var
+  RegistList: TList;
+  ListCriti: TCriticalSection;
+
+
+procedure GetMsgFromDLL(name       : pchar;
+                        messageBuf : pointer; messageLen : dword;
+                        answerBuf  : pointer; answerLen  : dword); stdcall;
+var
+  I: Integer;
+  ipc: LPTRegistIPC;
+begin
+  boolean(answerBuf^) := False;
+  
+  ListCriti.Enter;
+  for I := 0 to RegistList.Count -1 do
+  begin
+    ipc := RegistList[I];
+    if  StrPas (name) = ipc.IpcName then
+    begin
+      boolean(answerBuf^) := ipc.Callback (name, messageBuf, messageLen);
+      Break;
+    end;
+  end;
+
+  ListCriti.Leave;
+end;
+
+function StartHear (WhoAmI: PChar; HearRecv: THearCallBack): LongBool; Stdcall;
+var
+  I: Integer;
+  ipc: LPTRegistIPC;
+begin
+  Result := False;
+   
+  if not assigned (RegistList) then
+  begin
+    RegistList := TList.Create;
+    ListCriti := TCriticalSection.Create;
+  end;
+
+  ListCriti.Enter;
+  for I := 0 to RegistList.Count -1 do
+  begin
+    ipc := RegistList[I];
+    if  StrPas (WhoAmI) = ipc.IpcName then
+    begin
+      ListCriti.Leave;
+      exit;
+    end;
+  end;
+
+  ipc := AllocMem (SizeOf (TRegistIPC));
+  ipc.IpcName := StrPas (WhoAmI);
+  ipc.Callback := HearRecv;
+
+  RegistList.Add(ipc);
+
+  ListCriti.Leave;
+
+  Result := CreateIpcQueue (WhoAmI, GetMsgFromDLL);
+end;
+
+function StopHear (WhoAmI: PChar): LongBool; Stdcall;
+var
+  I: Integer;
+  ipc: LPTRegistIPC;
+begin
+  Result := False;
+  if not assigned (RegistList) then exit;
+
+  ListCriti.Enter;
+  for I := RegistList.Count -1 downto 0 do
+  begin
+    ipc := RegistList[I];
+    if  StrPas (WhoAmI) = ipc.IpcName then
+    begin
+      DestroyIpcQueue (WhoAmI);
+      FreeMem (ipc);
+      RegistList.Delete(I);
+      Break;
+    end;
+  end;
+  ListCriti.Leave;
+end;
+
+function Say (ToWho: PChar; Buffer: PChar; Size: Integer): LongBool; Stdcall;
+begin
+  result := false;
+  SendIpcMessage(ToWho, Buffer, Size, @result, sizeOf(result));
+end;
+
+end.

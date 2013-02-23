@@ -1,0 +1,8 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<BorlandProject>
+	<Transactions>
+    <Transaction>2008-08-27 16:32:04.432.bdsproj,C:\Documents and Settings\siestii\My Documents\Borland Studio Projects\Project1.bdsproj=C:\Documents and Settings\siestii\桌面\ZhuXian\VerifyCode\ClientLoader.bdsproj</Transaction>
+    <Transaction>2008-08-27 17:29:09.637.pas,C:\Documents and Settings\siestii\桌面\ZhuXian\VerifyCode\Unit1.pas=C:\Documents and Settings\siestii\桌面\ZhuXian\lib\lib_normal\TraceLastError.pas</Transaction>
+    <Transaction>2008-08-27 18:19:12.505.pas,C:\Documents and Settings\siestii\桌面\ZhuXian\lib\lib_normal\TraceLastError.pas=</Transaction>
+  </Transactions>
+</BorlandProject>
